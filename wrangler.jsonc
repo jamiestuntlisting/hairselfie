@@ -1,0 +1,13 @@
+/*
+ * Cloudflare Workers config — static-assets-only Worker (no server code).
+ * Deploy with:  npx wrangler deploy
+ * Local dev:    npx wrangler dev
+ */
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "hairselfie",
+  "compatibility_date": "2026-08-09",
+  "assets": {
+    "directory": "./public"
+  }
+}
