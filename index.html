@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Hair Selfie — a StuntListing add-on. Build a four-angle hair reference sheet (front, sides, back) with your performer details, right from your phone.">
+<title>Hair Selfie · StuntListing</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230d0e11'/%3E%3Cpath d='M32 12c8.3 0 14 6.6 14 15.4 0 9.6-6 17-14 17s-14-7.4-14-17C18 18.6 23.7 12 32 12z' fill='none' stroke='%23ff5a36' stroke-width='3.5' stroke-dasharray='4 5' stroke-linecap='round'/%3E%3Cpath d='M24 44c-6 1.6-11 5-13 12M40 44c6 1.6 11 5 13 12' fill='none' stroke='%23ff5a36' stroke-width='3.5' stroke-dasharray='4 5' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true">
+      <rect width="64" height="64" rx="14" fill="#101218"/>
+      <path d="M32 12c8.3 0 14 6.6 14 15.4 0 9.6-6 17-14 17s-14-7.4-14-17C18 18.6 23.7 12 32 12z" fill="none" stroke="#ff5a36" stroke-width="3.5" stroke-dasharray="4 5" stroke-linecap="round"/>
+      <path d="M24 44c-6 1.6-11 5-13 12M40 44c6 1.6 11 5 13 12" fill="none" stroke="#ff5a36" stroke-width="3.5" stroke-dasharray="4 5" stroke-linecap="round"/>
+    </svg>
+    <div>
+      <h1>Hair Selfie</h1>
+      <p class="tagline">a StuntListing add-on</p>
+    </div>
+  </div>
+  <div id="session-chip" class="session-chip" aria-live="polite"></div>
+</header>
+
+<div id="demo-banner" class="demo-banner" hidden>
+  <span>Demo mode — not connected to StuntListing yet.</span>
+  <label>View as
+    <select id="demo-role">
+      <option value="performer">Performer</option>
+      <option value="coordinator">Coordinator</option>
+    </select>
+  </label>
+</div>
+
+<main>
+  <!-- ── Step 1 · Photos ─────────────────────────────────────────── -->
+  <section class="panel" id="photos-panel">
+    <div class="panel-head">
+      <span class="step-num" aria-hidden="true">1</span>
+      <h2>Add your four photos</h2>
+    </div>
+    <p class="hint">
+      Front, left side, right side, back — hair fully visible, camera at eye level.
+      Line your head up with the dashed guide, passport-photo style.
+    </p>
+
+    <div class="photo-actions">
+      <button id="add-photos" class="btn" type="button">
+        <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>
+        Add photos
+      </button>
+      <label class="toggle"><input type="checkbox" id="toggle-guides" checked> Head guides</label>
+      <label class="toggle"><input type="checkbox" id="toggle-labels" checked> Labels on final image</label>
+    </div>
+    <p class="hint hint-small">Tip: you can pick all four at once — choose them in order front → left → right → back.</p>
+
+    <div id="grid" class="grid guides-on" aria-label="Photo positions"></div>
+
+    <p class="hint hint-small" id="swap-hint">
+      Out of order? Drag one photo onto another to swap — or tap a photo, then tap where it should go.
+    </p>
+
+    <input type="file" id="file-multi" accept="image/*" multiple hidden>
+    <input type="file" id="file-single" accept="image/*" hidden>
+  </section>
+
+  <!-- ── Step 2 · Details ────────────────────────────────────────── -->
+  <section class="panel" id="info-panel">
+    <div class="panel-head">
+      <span class="step-num" aria-hidden="true">2</span>
+      <h2>Performer details</h2>
+    </div>
+    <p class="hint">This goes in the black bar under the photos — white text, never over the images.</p>
+
+    <div id="perf-source" class="perf-source" aria-live="polite"></div>
+
+    <form id="info-form" class="info-form" autocomplete="off">
+      <div class="field field-wide">
+        <label for="f-name">Name</label>
+        <input id="f-name" name="name" type="text" placeholder="Performer name" autocomplete="name">
+      </div>
+      <div class="field">
+        <label for="f-height">Height</label>
+        <input id="f-height" name="height" type="text" placeholder="e.g. 5&#8242;11&#8243;">
+      </div>
+      <div class="field">
+        <label for="f-weight">Weight</label>
+        <input id="f-weight" name="weight" type="text" placeholder="e.g. 175 lb">
+      </div>
+      <div class="field">
+        <label for="f-phone">Phone</label>
+        <input id="f-phone" name="phone" type="tel" placeholder="(555) 555-0100">
+      </div>
+      <div class="field">
+        <label for="f-email">Email</label>
+        <input id="f-email" name="email" type="email" placeholder="you@example.com">
+      </div>
+    </form>
+
+    <div id="coordinator-box"></div>
+  </section>
+
+  <!-- ── Step 3 · Create ─────────────────────────────────────────── -->
+  <section class="panel" id="create-panel">
+    <div class="panel-head">
+      <span class="step-num" aria-hidden="true">3</span>
+      <h2>Create</h2>
+    </div>
+    <p id="create-status" class="hint" aria-live="polite"></p>
+    <button id="create-btn" class="btn btn-primary btn-big" type="button">Create my Hair Selfie</button>
+
+    <div id="result" class="result" hidden>
+      <img id="result-img" alt="Finished hair selfie sheet: four photos in a grid with performer details below">
+      <div class="result-actions">
+        <a id="download-link" class="btn btn-primary" download>
+          <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M4 19h16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+          Download JPEG
+        </a>
+        <button id="back-to-edit" class="btn" type="button">Keep editing</button>
+      </div>
+      <p class="hint hint-small">On a phone you can also press and hold the image and choose “Save to Photos”.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  Hair Selfie · built for StuntListing — your photos are composed right on this device and never uploaded.
+</footer>
+
+<!-- ── Adjust modal ──────────────────────────────────────────────── -->
+<div id="adjust-modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="adjust-title">
+  <div class="modal-card">
+    <h3 id="adjust-title">Adjust photo</h3>
+    <p class="hint hint-small">Drag to reposition · pinch or scroll to zoom · line up with the guide.</p>
+    <div class="adjust-stage">
+      <canvas id="adjust-canvas"></canvas>
+      <div id="adjust-guide" class="adjust-guide" aria-hidden="true"></div>
+    </div>
+    <label class="zoom-row">
+      <span>Zoom</span>
+      <input type="range" id="adjust-zoom" min="100" max="400" value="100" step="1">
+    </label>
+    <div class="modal-actions">
+      <button id="adjust-rotate" class="btn btn-small" type="button" title="Rotate 90°">⟳ Rotate</button>
+      <button id="adjust-reset" class="btn btn-small" type="button">Reset</button>
+      <span class="spacer"></span>
+      <button id="adjust-cancel" class="btn btn-small" type="button">Cancel</button>
+      <button id="adjust-done" class="btn btn-primary btn-small" type="button">Done</button>
+    </div>
+  </div>
+</div>
+
+<noscript><p style="padding:16px;color:#fff">Hair Selfie needs JavaScript turned on.</p></noscript>
+
+<script src="js/config.js"></script>
+<script src="js/outlines.js"></script>
+<script src="js/api.js"></script>
+<script src="js/composer.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
