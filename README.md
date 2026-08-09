@@ -21,6 +21,10 @@ JPEG.
   overlaid. What you see in the editor is exactly what's exported.
 - **Details bar** — name, height, weight, phone and email printed as white text on the black
   band *below* the photos (never over them). Empty fields are simply left out.
+- **Optional note** — a short line (up to 140 characters) under the details, for things like
+  "Natural color, no extensions — happy to cut or color". It wraps to a second line if needed,
+  sits slightly dimmer than the contact details, and the band grows to fit it. The note belongs
+  to the sheet rather than the person, so it stays put when a coordinator switches performers.
 - **Coordinator tools** — locked for regular users. Signed in as a coordinator, you get an
   autocomplete performer search; picking a performer swaps their details into the sheet
   (with a one-click "switch back to me"). By default the sheet always uses **your** info.

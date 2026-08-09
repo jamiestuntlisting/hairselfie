@@ -62,13 +62,19 @@
   var resultBox = $('#result');
   var resultImg = $('#result-img');
   var downloadLink = $('#download-link');
+  var noteInput = $('#f-note');
+  var noteCount = $('#note-count');
 
   var cells = {};          // key → { root, canvas, guide, dragDepth }
   var pendingSlot = null;  // slot waiting on the single-file picker
   var dragSourceKey = null;
   var resultUrl = null;
 
+  /* Profile fields — driven by the session user or a coordinator's pick.
+     The note is deliberately not one of them: it belongs to the sheet, not
+     the person, so switching performers leaves it alone. */
   var FIELDS = ['name', 'height', 'weight', 'phone', 'email'];
+  var NOTE_MAX = 140;
 
   /* ── photo grid ──────────────────────────────────────────────── */
 
@@ -433,6 +439,19 @@
     return o;
   }
 
+  /* Everything that gets printed on the sheet: profile fields plus the note. */
+  function readSheet() {
+    var o = readForm();
+    o.note = noteInput.value.trim();
+    return o;
+  }
+
+  function updateNoteCount() {
+    var used = noteInput.value.length;
+    noteCount.textContent = used ? used + ' / ' + NOTE_MAX : '';
+    noteCount.classList.toggle('near-limit', used > NOTE_MAX - 20);
+  }
+
   var persistProfile = debounce(function () {
     if (Api.isDemo && !state.performer) {
       Api.saveLocalProfile(Object.assign({ id: 'demo-me' }, readForm()));
@@ -637,7 +656,7 @@
   }
 
   function doCreate() {
-    var person = readForm();
+    var person = readSheet();
     var missing = SLOT_DEFS.filter(function (d) { return !state.slots[d.key]; });
 
     if (missing.length === 4) {
@@ -738,6 +757,9 @@
       if (!state.performer) state.me = Object.assign({}, state.me, readForm());
       persistProfile();
     });
+
+    noteInput.addEventListener('input', updateNoteCount);
+    updateNoteCount();
 
     createBtn.addEventListener('click', doCreate);
     $('#back-to-edit').addEventListener('click', function () {

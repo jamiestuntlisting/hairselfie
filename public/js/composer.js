@@ -137,6 +137,58 @@ window.Composer = (function () {
     }
   }
 
+  /* Hard-split a word that is wider than the line all by itself. */
+  function splitLongWord(ctx, word, maxWidth) {
+    var parts = [];
+    var cur = '';
+    for (var i = 0; i < word.length; i++) {
+      var test = cur + word.charAt(i);
+      if (cur && ctx.measureText(test).width > maxWidth) {
+        parts.push(cur);
+        cur = word.charAt(i);
+      } else {
+        cur = test;
+      }
+    }
+    if (cur) parts.push(cur);
+    return parts;
+  }
+
+  /*
+   * Greedy word wrap at the current ctx.font, capped at maxLines.
+   * If the text still doesn't fit, the last line is ellipsized.
+   */
+  function wrapText(ctx, text, maxWidth, maxLines) {
+    var words = [];
+    String(text).split(/\s+/).filter(Boolean).forEach(function (w) {
+      if (ctx.measureText(w).width <= maxWidth) words.push(w);
+      else words.push.apply(words, splitLongWord(ctx, w, maxWidth));
+    });
+
+    var lines = [];
+    var cur = '';
+    words.forEach(function (w) {
+      var test = cur ? cur + ' ' + w : w;
+      if (!cur || ctx.measureText(test).width <= maxWidth) {
+        cur = test;
+      } else {
+        lines.push(cur);
+        cur = w;
+      }
+    });
+    if (cur) lines.push(cur);
+
+    if (lines.length <= maxLines) return lines;
+
+    lines = lines.slice(0, maxLines);
+    var last = lines[maxLines - 1];
+    while (last && ctx.measureText(last + '…').width > maxWidth) {
+      last = last.slice(0, -1).replace(/\s+$/, '');
+    }
+    lines[maxLines - 1] = last + '…';
+    return lines;
+  }
+
   /*
    * Build the final sheet. Returns a canvas:
    *   ┌─────────┬─────────┐
@@ -146,6 +198,7 @@ window.Composer = (function () {
    *   ├─────────────────────┤
    *   │  NAME               │  ← white on black, below the photos
    *   │  h • w • ph • email │
+   *   │  optional note      │
    *   └─────────────────────┘
    */
   function compose(slots, person, opts) {
@@ -192,16 +245,35 @@ window.Composer = (function () {
       }
     }
 
+    /* optional short note, wrapped to at most two lines */
+    var noteText = ((person && person.note) || '').trim().replace(/\s+/g, ' ');
+    var noteSize = 0;
+    var noteLines = [];
+    var noteW = Math.min(maxTextW, Math.round(W * 0.84));
+    if (noteText) {
+      noteSize = Math.round(CW * 0.040);
+      scratch.font = '400 ' + noteSize + 'px ' + FONT_STACK;
+      noteLines = wrapText(scratch, noteText, noteW, 2);
+    }
+
     var gapTop = Math.round(CW * 0.085);
     var gapBottom = Math.round(CW * 0.09);
     var lineGap = Math.round(CW * 0.022);
+    var noteGap = Math.round(CW * 0.036);
+    var noteLineGap = Math.round(noteSize * 0.34);
     var infoH = gapTop + gapBottom;
     if (nameSize) infoH += nameSize;
     if (nameSize && detailLines.length) infoH += lineGap;
     detailLines.forEach(function (l, i) {
       infoH += l.size + (i > 0 ? lineGap : 0);
     });
-    if (!nameSize && !detailLines.length) infoH = Math.round(CW * 0.04);
+    if (noteLines.length) {
+      if (nameSize || detailLines.length) infoH += noteGap;
+      noteLines.forEach(function (_, i) {
+        infoH += noteSize + (i > 0 ? noteLineGap : 0);
+      });
+    }
+    if (!nameSize && !detailLines.length && !noteLines.length) infoH = Math.round(CW * 0.04);
 
     var H = M + gridH + infoH;
 
@@ -267,6 +339,17 @@ window.Composer = (function () {
       ctx.fillText(l.text, W / 2, ty);
       ty += l.size;
     });
+
+    if (noteLines.length) {
+      if (nameSize || detailLines.length) ty += noteGap;
+      ctx.font = '400 ' + noteSize + 'px ' + FONT_STACK;
+      ctx.fillStyle = 'rgba(255,255,255,0.78)';
+      noteLines.forEach(function (line, i) {
+        if (i > 0) ty += noteLineGap;
+        ctx.fillText(line, W / 2, ty);
+        ty += noteSize;
+      });
+    }
 
     return canvas;
   }
