@@ -475,9 +475,19 @@
     banner.hidden = false;
     var sel = $('#demo-role');
     sel.value = Api.getDemoRole() || 'performer';
+
+    /* Re-render in place rather than reloading, so switching roles keeps
+       the photos and anything already typed into the form. */
     sel.addEventListener('change', function () {
       Api.setDemoRole(sel.value);
-      location.reload();
+      state.coordinator = sel.value === 'coordinator';
+      if (!state.coordinator && state.performer) {
+        state.performer = null;
+        fillForm(state.me);
+      }
+      renderSessionChip();
+      renderPerfSource();
+      renderCoordinatorBox();
     });
   }
 
