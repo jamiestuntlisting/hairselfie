@@ -29,7 +29,8 @@
     me: {},
     coordinator: false,
     performer: null,     // coordinator-selected performer, or null = "me"
-    selectedKey: null    // cell picked for tap-to-swap
+    selectedKey: null,   // cell picked for tap-to-swap
+    requestFor: null     // performer this page was opened for, via a request link
   };
 
   /* ── tiny helpers ────────────────────────────────────────────── */
@@ -67,8 +68,11 @@
   var resultBox = $('#result');
   var resultImg = $('#result-img');
   var downloadLink = $('#download-link');
-  var savePhotosBtn = $('#save-photos');
+  var saveImageBtn = $('#save-image');
   var saveHint = $('#save-hint');
+  var summaryBox = $('#details-summary');
+  var summaryText = $('#summary-text');
+  var editBtn = $('#edit-details');
   var noteInput = $('#f-note');
   var noteCount = $('#note-count');
   var cutBox = $('#f-cut');
@@ -637,6 +641,28 @@
     return o;
   }
 
+  /* One-line identity summary, so the whole flow fits on a phone screen.
+     The full form is one tap away and opens itself when there is nothing
+     to summarise yet. */
+  function renderSummary() {
+    var p = readForm();
+    var bits = [p.height, p.weight, p.phone, p.email].filter(Boolean);
+    if (!p.name && !bits.length) {
+      summaryText.innerHTML = '<span class="summary-empty">No details yet — tap Edit</span>';
+      return;
+    }
+    summaryText.innerHTML =
+      '<b>' + esc(p.name || 'No name') + '</b>' +
+      (bits.length ? '<span class="summary-rest">' + esc(bits.join('  ·  ')) + '</span>' : '');
+  }
+
+  function setDetailsOpen(open) {
+    infoForm.hidden = !open;
+    summaryBox.hidden = open;
+    editBtn.textContent = open ? 'Done' : 'Edit';
+    if (!open) renderSummary();
+  }
+
   function updateNoteCount() {
     var used = noteInput.value.length;
     noteCount.textContent = used ? used + ' / ' + NOTE_MAX : '';
@@ -673,37 +699,24 @@
         fillForm(state.me);
       }
       renderSessionChip();
-      renderPerfSource();
       renderCoordinator();
     });
-  }
-
-  function renderPerfSource() {
-    var el = $('#perf-source');
-    if (state.performer) {
-      el.innerHTML =
-        'Creating for <b>' + esc(state.performer.name) + '</b>' +
-        '<button class="btn btn-small" id="ps-reset" type="button">Switch back to me</button>';
-      el.classList.add('show');
-      $('#ps-reset').addEventListener('click', resetPerformer);
-    } else {
-      el.classList.remove('show');
-      el.innerHTML = '';
-    }
   }
 
   function selectPerformer(p) {
     state.performer = p;
     fillForm(p);
-    renderPerfSource();
+    setDetailsOpen(false);
     renderCoordCurrent();
+    renderSendBox();
   }
 
   function resetPerformer() {
     state.performer = null;
     fillForm(state.me);
-    renderPerfSource();
+    setDetailsOpen(false);
     renderCoordCurrent();
+    renderSendBox();
     var search = $('#perf-search');
     if (search) search.value = '';
   }
@@ -743,6 +756,7 @@
       note.hidden = true;
     }
     renderCoordCurrent();
+    renderSendBox();
   }
 
   var acItems = [];
@@ -840,6 +854,100 @@
     input.addEventListener('blur', function () { setTimeout(closeList, 150); });
   }
 
+  /* ── request links ───────────────────────────────────────────── */
+
+  var REQ_PARAM = (window.HAIRSELFIE_CONFIG && window.HAIRSELFIE_CONFIG.requestParam) || 'p';
+
+  function requestedPerformerId() {
+    try {
+      return new URLSearchParams(window.location.search).get(REQ_PARAM);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /* Only the performer id travels in the link — details are fetched, so no
+     contact information ends up sitting in someone's text messages. */
+  function requestLinkFor(performer) {
+    var url = new URL(window.location.href);
+    url.hash = '';
+    url.search = '';
+    url.searchParams.set(REQ_PARAM, performer.id);
+    return url.toString();
+  }
+
+  function smsHref(performer, link) {
+    var first = String(performer.name || '').split(' ')[0] || 'there';
+    var body = 'Hi ' + first + ' — please send four hair photos (front, both sides, back) ' +
+               'for the shoot. Takes a minute on your phone: ' + link;
+    var num = String(performer.phone || '').replace(/[^0-9+]/g, '');
+    /* "?&body=" is the spelling that works on both iOS and Android */
+    return 'sms:' + num + '?&body=' + encodeURIComponent(body);
+  }
+
+  function renderSendBox() {
+    var box = $('#send-box');
+    if (!box) return;
+    if (!state.coordinator || !state.performer) {
+      box.hidden = true;
+      box.innerHTML = '';
+      return;
+    }
+    var p = state.performer;
+    var link = requestLinkFor(p);
+    box.hidden = false;
+    box.innerHTML =
+      '<div class="send-head">Ask ' + esc(String(p.name).split(' ')[0]) +
+        ' to take the photos</div>' +
+      '<p class="hint hint-small">They open this link and go straight to the camera — ' +
+        'their details are already filled in.</p>' +
+      '<div class="send-link" id="send-link">' + esc(link) + '</div>' +
+      '<div class="send-actions">' +
+        (p.phone ? '<a class="btn btn-primary btn-small" id="send-sms" href="' + esc(smsHref(p, link)) + '">Text ' + esc(String(p.name).split(' ')[0]) + '</a>' : '') +
+        '<button class="btn btn-small" id="send-copy" type="button">Copy link</button>' +
+        '<button class="btn btn-small" id="send-share" type="button" hidden>Share</button>' +
+      '</div>' +
+      '<p class="send-status" id="send-status" aria-live="polite"></p>';
+
+    $('#send-copy').addEventListener('click', function () {
+      var status = $('#send-status');
+      var done = function () { status.textContent = 'Link copied.'; };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link).then(done, function () {
+          status.textContent = 'Copy failed — select the link above.';
+        });
+      } else {
+        status.textContent = 'Select the link above to copy it.';
+      }
+    });
+
+    if (navigator.share) {
+      var shareBtn = $('#send-share');
+      shareBtn.hidden = false;
+      shareBtn.addEventListener('click', function () {
+        navigator.share({ title: 'Hair Selfie', text: 'Please send four hair photos', url: link })
+          .catch(function () { /* dismissed */ });
+      });
+    }
+  }
+
+  /* Opened from a request link: show who it is for and prefill their info. */
+  function enterRequestMode(performer) {
+    state.requestFor = performer;
+    state.performer = null;
+    fillForm(performer);
+    setDetailsOpen(false);
+
+    var banner = $('#request-banner');
+    banner.hidden = false;
+    banner.innerHTML =
+      '<b>Hair selfie requested for ' + esc(performer.name) + '</b>' +
+      '<span>Take four photos of your hair — front, both sides and back — then hit Create.</span>';
+
+    $('#coord-panel').hidden = true;
+    $('#session-chip').hidden = true;
+  }
+
   /* ── create, save & download ─────────────────────────────────── */
 
   function updateCreateStatus() {
@@ -898,15 +1006,9 @@
         downloadLink.download = resultName;
 
         var file = new File([blob], resultName, { type: Composer.mimeType() });
-        if (canSharePhotos(file)) {
-          savePhotosBtn.hidden = false;
-          downloadLink.classList.remove('btn-primary');
-          saveHint.textContent = 'Save to Photos puts it straight in your camera roll.';
-        } else {
-          savePhotosBtn.hidden = true;
-          downloadLink.classList.add('btn-primary');
-          saveHint.textContent = 'Tip: press and hold the image above to save it to your photos.';
-        }
+        saveHint.textContent = canSharePhotos(file)
+          ? 'Saves straight to your camera roll.'
+          : 'Saves to your downloads folder.';
 
         resultBox.hidden = false;
         requestAnimationFrame(function () {
@@ -926,14 +1028,20 @@
       });
   }
 
-  function saveToPhotos() {
+  /*
+   * One button. On a phone the share sheet offers "Save Image", which puts
+   * the sheet in the camera roll rather than Files; everywhere else it is a
+   * plain download.
+   */
+  function saveImage() {
     if (!resultBlob) return;
     var file = new File([resultBlob], resultName, { type: Composer.mimeType() });
-    if (!canSharePhotos(file)) return;
+    if (!canSharePhotos(file)) { downloadLink.click(); return; }
     navigator.share({ files: [file] }).catch(function (err) {
       if (err && err.name === 'AbortError') return;   // user dismissed the sheet
       console.error(err);
-      saveHint.textContent = 'Couldn’t open the share sheet — use Download image instead.';
+      saveHint.textContent = 'Share sheet unavailable — saving to downloads instead.';
+      downloadLink.click();
     });
   }
 
@@ -966,14 +1074,18 @@
 
     infoForm.addEventListener('submit', function (e) { e.preventDefault(); });
     infoForm.addEventListener('input', function () {
-      if (!state.performer) state.me = Object.assign({}, state.me, readForm());
+      if (!state.performer && !state.requestFor) {
+        state.me = Object.assign({}, state.me, readForm());
+      }
+      renderSummary();
       persistProfile();
     });
     noteInput.addEventListener('input', updateNoteCount);
     updateNoteCount();
 
     createBtn.addEventListener('click', doCreate);
-    savePhotosBtn.addEventListener('click', saveToPhotos);
+    saveImageBtn.addEventListener('click', saveImage);
+    editBtn.addEventListener('click', function () { setDetailsOpen(infoForm.hidden); });
 
     /* stray drops shouldn't navigate the page away */
     window.addEventListener('dragover', function (e) { e.preventDefault(); });
@@ -1014,6 +1126,8 @@
     wireAutocomplete();
     updateCreateStatus();
 
+    var reqId = requestedPerformerId();
+
     Api.getSession().then(function (session) {
       state.me = session.user || {};
       state.coordinator = !!session.coordinator;
@@ -1021,7 +1135,7 @@
       renderSessionChip();
       renderDemoBanner();
       renderCoordinator();
-      renderPerfSource();
+      setDetailsOpen(!state.me.name);
     }).catch(function (err) {
       console.error('session failed', err);
       state.me = {};
@@ -1029,12 +1143,27 @@
       renderSessionChip(true);
       renderDemoBanner();
       renderCoordinator();
+      setDetailsOpen(true);
+    }).then(function () {
+      if (!reqId) return;
+      return Api.getPerformer(reqId).then(enterRequestMode, function (err) {
+        /* a stale or mistyped link is user input, not a fault — say so in
+           the banner and let them carry on making a sheet by hand */
+        console.warn('request link could not be resolved:', err.message);
+        var banner = $('#request-banner');
+        banner.hidden = false;
+        banner.classList.add('is-error');
+        banner.innerHTML = '<b>That request link didn’t work</b>' +
+          '<span>We couldn’t look up who it was for. You can still make a sheet below.</span>';
+      });
     });
   }
 
   /* exposed for integration debugging and automated tests */
   window.HairSelfie = {
     state: state,
+    requestLinkFor: requestLinkFor,
+    setDetailsOpen: setDetailsOpen,
     renderCell: renderCell,
     assignFiles: assignFiles,
     swapSlots: swapSlots,

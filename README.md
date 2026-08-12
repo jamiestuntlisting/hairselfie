@@ -29,17 +29,18 @@ JPEG.
 - **Coordinator tools** — always visible, above the performer details. Coordinators get an
   autocomplete performer search that swaps that performer's details into the sheet; everyone
   else sees the box explain that it's coordinators only when they touch it.
-- **Save to Photos** — on phones the finished sheet goes straight to the camera roll via the
-  share sheet, with **Download image** as the fallback everywhere else.
+- **Save image** — one button. On a phone the share sheet offers *Save Image*, which puts the
+  sheet in the camera roll rather than Files; on desktop it downloads.
+- **Request links** — a coordinator finds a performer and gets a link to text them. Opening it
+  names the performer, fills in their details and goes straight to the camera.
 - **Private by design** — photos are composed entirely in the browser with canvas.
   Nothing is uploaded.
 
 ## Not built yet
 
-Letting a coordinator **send a hair selfie request to a performer** (the performer opens a link
-and just takes the four photos) needs somewhere to store and deliver the request, so it waits on
-the StuntListing backend. The guided **Take photos** flow it would drop the performer into is
-already here.
+The client side is complete, including request links. What still needs the StuntListing backend:
+the three endpoints below, signing the request tokens, and sending the text from StuntListing
+rather than the coordinator's own SMS app.
 
 ![Example of a finished sheet](docs/screenshot-result.jpg)
 
@@ -87,42 +88,66 @@ Create → import the GitHub repository — Cloudflare then builds and deploys o
 
 ## Wiring it into StuntListing
 
-All backend contact goes through two calls in `public/js/api.js`; everything else is UI. To connect the
-real site:
+Everything the app needs from the server goes through three calls in
+`public/js/api.js`; the rest is UI. To connect the real site:
 
 1. In `public/js/config.js` set `mode: 'stuntlisting'`.
 2. Serve the app from a StuntListing origin (e.g. `stuntlisting.com/hair-selfie/`) so the
-   session cookie rides along, and implement the two endpoints:
+   session cookie rides along.
+3. Implement three endpoints:
 
-   **`GET /api/hair-selfie/session`** → who is signed in, and are they a coordinator?
+**`GET /api/hair-selfie/session`** — who is signed in, and are they a coordinator?
 
-   ```json
-   {
-     "user": {
-       "id": "123",
-       "name": "Jamie Northrup",
-       "height": "6'0\"",
-       "weight": "185 lb",
-       "phone": "(555) 555-0100",
-       "email": "jamie@example.com"
-     },
-     "coordinator": false
-   }
-   ```
+```json
+{
+  "user": { "id": "123", "name": "Jamie Northrup", "height": "6'0\"",
+            "weight": "185 lb", "phone": "(555) 555-0100", "email": "jamie@example.com" },
+  "coordinator": false
+}
+```
 
-   **`GET /api/hair-selfie/performers?q=al`** → autocomplete results (same person shape):
+**`GET /api/hair-selfie/performers?q=al`** — autocomplete for coordinators. Returns an array of
+the same person shape. **Must return `403` unless the caller really is a coordinator** — the UI
+only makes the box inert, which is cosmetic, and this endpoint hands out contact details.
 
-   ```json
-   [
-     { "id": "88", "name": "Alexis Tran", "height": "5'4\"", "weight": "121 lb",
-       "phone": "(310) 555-0141", "email": "alexis@example.com" }
-   ]
-   ```
+**`GET /api/hair-selfie/performers/{token}`** — resolves a request link back to one performer,
+same person shape.
 
-3. **Enforce the coordinator check server-side.** The UI shows the coordinator search to
-   everyone and only makes it inert for performers — that's cosmetic. The performer-search
-   endpoint returns contact info, so it must return `403` unless the session user really is a
-   coordinator.
+### Both entry points
+
+The same page serves both tools; what a person sees follows from `session`.
+
+- **Performer tool** — link to it plainly. They get their own details prefilled and four photo
+  slots.
+- **Coordinator tool** — the same link. Because `coordinator` comes back `true`, the search box
+  unlocks and the send-a-request panel appears.
+
+### Request links (the textable one)
+
+A coordinator picks a performer and gets a link:
+
+```
+https://…/hair-selfie/?p=<token>
+```
+
+Opened on a phone, that link names the performer, fills in their details and drops them straight
+on **Take photos**. The coordinator panel is hidden.
+
+The app treats `p` as **opaque** — it passes the value to the endpoint above and never parses it.
+That matters, because:
+
+> **Mint `p` as a signed, expiring token, not a raw performer id.** A raw id is guessable, and
+> `/performers/{id}` returns phone and email — anyone could walk the range and scrape the roster.
+> Sign it (performer id + expiry), reject anything unsigned or stale, and rate-limit the
+> endpoint. The demo uses bare ids like `demo-4` only because it has no server to sign with;
+> nothing in the client needs to change when you switch to real tokens.
+
+Only the token travels in the link, so no phone number or email ends up sitting in a text
+message thread.
+
+To have StuntListing send the text itself rather than opening the coordinator's SMS app, build
+the same URL server-side and put it in your outbound message; the client's **Text** button is
+just a `sms:` link for when you want to send it by hand.
 
 Endpoint paths are configurable in `public/js/config.js` if you'd rather mount them elsewhere.
 

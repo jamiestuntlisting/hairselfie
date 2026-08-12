@@ -35,12 +35,15 @@
   </label>
 </div>
 
+<!-- shown when the page was opened from a coordinator's request link -->
+<div id="request-banner" class="request-banner" hidden></div>
+
 <main>
-  <!-- ── Step 1 · Photos ─────────────────────────────────────────── -->
+  <!-- ── Photos ──────────────────────────────────────────────────── -->
   <section class="panel" id="photos-panel">
     <div class="panel-head">
       <span class="step-num" aria-hidden="true">1</span>
-      <h2>Add your four photos</h2>
+      <h2>Your four photos</h2>
     </div>
     <p class="hint">Hair fully visible, camera at eye level, head filling the dashed guide.</p>
 
@@ -53,41 +56,25 @@
         <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>
         Add photos
       </button>
-      <label class="toggle"><input type="checkbox" id="toggle-guides" checked> Head guides</label>
+      <label class="toggle"><input type="checkbox" id="toggle-guides" checked> Guides</label>
     </div>
 
     <div id="grid" class="grid guides-on" aria-label="Photo positions"></div>
   </section>
 
-  <!-- ── Coordinator ─────────────────────────────────────────────── -->
-  <section class="panel" id="coord-panel">
-    <div class="panel-head panel-head-plain">
-      <h2>Coordinator tools</h2>
-      <span id="coord-badge" class="coord-badge" hidden>Coordinator</span>
-      <span id="coord-lock" class="coord-lockicon" aria-hidden="true">🔒</span>
-    </div>
-    <p class="hint">Making a sheet for another performer? Find them here.</p>
-
-    <div class="ac-wrap">
-      <input type="search" id="perf-search" placeholder="Search performers by name…"
-             role="combobox" aria-expanded="false" aria-autocomplete="list"
-             aria-controls="perf-listbox" autocomplete="off">
-      <div class="ac-list" id="perf-listbox" role="listbox" hidden></div>
-    </div>
-    <p id="coord-note" class="locked-note" hidden>This tool is locked — coordinators only.</p>
-    <div class="coord-current" id="coord-current"></div>
-  </section>
-
-  <!-- ── Step 2 · Details ────────────────────────────────────────── -->
+  <!-- ── Details (compact) ───────────────────────────────────────── -->
   <section class="panel" id="info-panel">
     <div class="panel-head">
       <span class="step-num" aria-hidden="true">2</span>
-      <h2>Performer details</h2>
+      <h2>Details</h2>
+      <button class="btn btn-small head-action" id="edit-details" type="button">Edit</button>
     </div>
 
-    <div id="perf-source" class="perf-source" aria-live="polite"></div>
+    <div class="summary" id="details-summary">
+      <div class="summary-text" id="summary-text"></div>
+    </div>
 
-    <form id="info-form" class="info-form" autocomplete="off">
+    <form id="info-form" class="info-form" autocomplete="off" hidden>
       <div class="field field-wide">
         <label for="f-name">Name</label>
         <input id="f-name" name="name" type="text" placeholder="Performer name" autocomplete="name">
@@ -108,22 +95,39 @@
         <label for="f-email">Email</label>
         <input id="f-email" name="email" type="email" placeholder="you@example.com">
       </div>
-      <div class="field field-wide">
-        <label for="f-note">
-          Note <span class="field-opt">optional — a short line under your details</span>
-        </label>
-        <input id="f-note" name="note" type="text" maxlength="140"
-               placeholder="e.g. Natural color, no extensions">
-        <span class="char-count" id="note-count"></span>
-      </div>
-      <div class="field field-wide checks">
-        <label class="check"><input type="checkbox" id="f-cut"> Able to cut hair</label>
-        <label class="check"><input type="checkbox" id="f-shave"> Able to shave</label>
-      </div>
     </form>
+
+    <div class="compact-row">
+      <input id="f-note" type="text" maxlength="140" placeholder="Add a note (optional)">
+      <span class="char-count" id="note-count"></span>
+    </div>
+
+    <div class="checks">
+      <label class="check"><input type="checkbox" id="f-cut"> Able to cut hair</label>
+      <label class="check"><input type="checkbox" id="f-shave"> Able to shave</label>
+    </div>
   </section>
 
-  <!-- ── Step 3 · Create ─────────────────────────────────────────── -->
+  <!-- ── Coordinator ─────────────────────────────────────────────── -->
+  <section class="panel" id="coord-panel">
+    <div class="panel-head panel-head-plain">
+      <h2>Coordinator tools</h2>
+      <span id="coord-badge" class="coord-badge" hidden>Coordinator</span>
+      <span id="coord-lock" class="coord-lockicon" aria-hidden="true">🔒</span>
+    </div>
+
+    <div class="ac-wrap">
+      <input type="search" id="perf-search" placeholder="Search performers by name…"
+             role="combobox" aria-expanded="false" aria-autocomplete="list"
+             aria-controls="perf-listbox" autocomplete="off">
+      <div class="ac-list" id="perf-listbox" role="listbox" hidden></div>
+    </div>
+    <p id="coord-note" class="locked-note" hidden>This tool is locked — coordinators only.</p>
+    <div class="coord-current" id="coord-current"></div>
+    <div class="send-box" id="send-box" hidden></div>
+  </section>
+
+  <!-- ── Create ──────────────────────────────────────────────────── -->
   <section class="panel" id="create-panel">
     <div class="panel-head">
       <span class="step-num" aria-hidden="true">3</span>
@@ -134,16 +138,11 @@
 
     <div id="result" class="result" hidden>
       <img id="result-img" alt="Finished hair selfie sheet: four photos in a grid with performer details below">
-      <div class="result-actions">
-        <button id="save-photos" class="btn btn-primary" type="button" hidden>
-          <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M4 16.5V18a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1.5M12 15V4m0 0L7.5 8.5M12 4l4.5 4.5" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
-          Save to Photos
-        </button>
-        <a id="download-link" class="btn" download>
-          <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M4 19h16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
-          Download image
-        </a>
-      </div>
+      <button id="save-image" class="btn btn-primary btn-big" type="button">
+        <svg viewBox="0 0 24 24" class="icon" aria-hidden="true"><path d="M4 16.5V18a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1.5M12 15V4m0 0L7.5 8.5M12 4l4.5 4.5" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+        Save image
+      </button>
+      <a id="download-link" download hidden>download</a>
       <p class="hint hint-small" id="save-hint"></p>
     </div>
   </section>

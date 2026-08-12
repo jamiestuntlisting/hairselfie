@@ -16,9 +16,20 @@ window.HAIRSELFIE_CONFIG = {
   endpoints: {
     // GET → { user: {id,name,height,weight,phone,email}, coordinator: true|false }
     session: '/api/hair-selfie/session',
-    // GET ?q=<query> → [ {id,name,height,weight,phone,email}, ... ]  (coordinator only)
-    performerSearch: '/api/hair-selfie/performers'
+    // GET ?q=<query> → [ {id,name,…}, … ]           (coordinator only)
+    performerSearch: '/api/hair-selfie/performers',
+    // GET → { id,name,height,weight,phone,email }   (one performer, by id)
+    performer: '/api/hair-selfie/performers/{id}'
   },
+
+  /*
+   * Request links. A coordinator sends a performer a link like
+   *   https://…/?p=<performerId>
+   * and the app opens straight into "take your four photos", with that
+   * performer's details already filled in. Only the id travels in the URL —
+   * the details are fetched, so no contact info ends up in a text message.
+   */
+  requestParam: 'p',
 
   output: {
     cellWidth: 1000,      // px per photo cell in the final sheet

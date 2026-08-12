@@ -116,6 +116,14 @@ window.HairSelfieApi = (function () {
       return delay(120, hits);
     },
 
+    /* resolve a request link (?p=<id>) back to a performer */
+    getPerformer: function (id) {
+      var me = loadProfile();
+      if (id === me.id) return delay(60, me);
+      var hit = DEMO_PERFORMERS.filter(function (p) { return p.id === id; })[0];
+      return hit ? delay(90, hit) : Promise.reject(new Error('performer not found'));
+    },
+
     /* demo-only helpers used by the UI */
     saveLocalProfile: function (profile) {
       try {
@@ -163,6 +171,16 @@ window.HairSelfieApi = (function () {
         .then(function (list) {
           return Array.isArray(list) ? list : (list.performers || []);
         });
+    },
+
+    getPerformer: function (id) {
+      var url = (cfg.endpoints.performer || '').replace('{id}', encodeURIComponent(id));
+      return fetch(url, { credentials: 'include' })
+        .then(function (res) {
+          if (!res.ok) throw new Error('performer lookup failed: ' + res.status);
+          return res.json();
+        })
+        .then(function (data) { return data.performer || data; });
     },
 
     saveLocalProfile: function () { /* server owns the profile in live mode */ },

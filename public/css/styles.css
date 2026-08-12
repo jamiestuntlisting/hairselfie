@@ -649,3 +649,78 @@ input[type="search"].is-locked {
   user-select: none;
 }
 .check input { accent-color: var(--accent); width: 18px; height: 18px; }
+
+
+/* ── Compact details ─────────────────────────────────────────────── */
+
+.summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 13px;
+  background: #10131a;
+  border: 1px solid var(--line-soft);
+  border-radius: 11px;
+}
+.summary-text { flex: 1 1 auto; min-width: 0; font-size: 14px; line-height: 1.45; }
+.summary-text b { display: block; font-size: 15.5px; }
+.summary-rest {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.summary-empty { color: var(--muted); }
+.head-action { margin-left: auto; flex: 0 0 auto; }
+
+.info-form { margin-top: 12px; }
+
+.compact-row { position: relative; margin-top: 10px; }
+.compact-row .char-count { position: absolute; right: 2px; top: calc(100% + 3px); }
+
+.checks { margin-top: 12px; }
+
+/* ── Request link ────────────────────────────────────────────────── */
+
+.request-banner {
+  display: grid;
+  gap: 3px;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 12px 18px;
+  background: #1a2418;
+  border-top: 1px solid #2f4a2b;
+  border-bottom: 1px solid #2f4a2b;
+  font-size: 14px;
+}
+.request-banner b { color: #9fe6a0; }
+.request-banner span { color: var(--muted); font-size: 13px; }
+.request-banner.is-error { background: #241a18; border-color: #4a2f2b; }
+.request-banner.is-error b { color: #ff9b83; }
+
+.send-box {
+  margin-top: 14px;
+  padding: 13px;
+  background: #10131a;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+}
+.send-head { font-weight: 700; font-size: 14.5px; margin-bottom: 2px; }
+.send-link {
+  margin: 8px 0 10px;
+  padding: 9px 11px;
+  background: #0a0c11;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--muted);
+  word-break: break-all;
+  user-select: all;
+}
+.send-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.send-status { margin: 8px 0 0; font-size: 12.5px; color: var(--ok); min-height: 1em; }
+
+#save-image { margin-top: 2px; }
