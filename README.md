@@ -4,6 +4,8 @@ Build a four-angle **hair reference sheet** — front, left side, right side, ba
 phone or computer, with the performer's details printed underneath, and download it as a single
 JPEG.
 
+**Live:** https://hairselfie.jamie-181.workers.dev
+
 ![The Hair Selfie editor](docs/screenshot-editor.png)
 
 ## What it does
