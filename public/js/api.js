@@ -61,13 +61,18 @@ window.HairSelfieApi = (function () {
     };
   });
 
+  /*
+   * Stands in for the signed-in StuntListing profile. In 'stuntlisting' mode
+   * these values come from the session endpoint, which is what makes the
+   * details form fill itself in.
+   */
   function defaultProfile() {
     return {
       id: 'demo-me',
       name: 'Jamie Northrup',
-      height: '',
-      weight: '',
-      phone: '',
+      height: "6'0\"",
+      weight: '185 lb',
+      phone: '(310) 555-0100',
       email: 'jamie@example.com'
     };
   }

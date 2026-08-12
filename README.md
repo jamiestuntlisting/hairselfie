@@ -10,30 +10,36 @@ JPEG.
 
 ## What it does
 
-- **Four photo positions** (Front · Left side · Right side · Back) laid out in a 2×2 grid.
-  Add photos by tapping a position, using the **Add photos** button (pick all four at once),
-  or dragging files in from your computer.
-- **Drag into position** — drop a file straight onto the spot it belongs in, drag a placed photo
-  onto another to swap them (desktop, and iOS long-press drag), or tap one photo then tap where
-  it should go (works everywhere).
-- **Passport-style head guides** — each position shows a dashed head-and-shoulders outline
-  (front or profile, matching the angle) so every photo is framed the same way. A faint version
-  of the guide sits over placed photos too, and can be toggled off.
-- **Adjust framing** — per-photo zoom, drag-to-reposition, and 90° rotation, with the head guide
-  overlaid. What you see in the editor is exactly what's exported.
+- **Four photo positions** (Front · Left side · Right side · Back) in a 2×2 grid.
+  **Take photos** walks you through the four angles one shot at a time using the camera;
+  **Add photos** picks from the library (all four at once, in order).
+- **Drag to rearrange** — press and hold a photo on a phone, or just drag with a mouse, and
+  drop it on another position to swap. Tapping one photo then another swaps them too.
+- **Passport-style head guides** — a large dashed head-and-shoulders outline in every position.
+  Side shots say which way to face in plain terms: a *left side* view means your **left ear is
+  toward the camera**, so the nose points to the left of frame. A faint guide stays over placed
+  photos and can be switched off.
+- **Adjust framing** — per-photo zoom, drag-to-reposition and 90° rotation, with the guide
+  overlaid. What you see in the editor is exactly what gets exported.
 - **Details bar** — name, height, weight, phone and email printed as white text on the black
-  band *below* the photos (never over them). Empty fields are simply left out.
-- **Optional note** — a short line (up to 140 characters) under the details, for things like
-  "Natural color, no extensions — happy to cut or color". It wraps to a second line if needed,
-  sits slightly dimmer than the contact details, and the band grows to fit it. The note belongs
-  to the sheet rather than the person, so it stays put when a coordinator switches performers.
-- **Coordinator tools** — locked for regular users. Signed in as a coordinator, you get an
-  autocomplete performer search; picking a performer swaps their details into the sheet
-  (with a one-click "switch back to me"). By default the sheet always uses **your** info.
-- **Create & download** — one button renders the sheet (about 2050×2900 px) and offers it as a
-  JPEG download. On phones you can also long-press the preview and "Save to Photos".
+  band *below* the photos, sized to run the full width of the sheet. Empty fields are left out.
+  Details fill themselves in from the signed-in StuntListing profile.
+- **Optional note** — a short line (up to 140 characters) under the details.
+- **Able to cut hair / Able to shave** — tick either and it prints as a pill on the sheet.
+- **Coordinator tools** — always visible, above the performer details. Coordinators get an
+  autocomplete performer search that swaps that performer's details into the sheet; everyone
+  else sees the box explain that it's coordinators only when they touch it.
+- **Save to Photos** — on phones the finished sheet goes straight to the camera roll via the
+  share sheet, with **Download image** as the fallback everywhere else.
 - **Private by design** — photos are composed entirely in the browser with canvas.
   Nothing is uploaded.
+
+## Not built yet
+
+Letting a coordinator **send a hair selfie request to a performer** (the performer opens a link
+and just takes the four photos) needs somewhere to store and deliver the request, so it waits on
+the StuntListing backend. The guided **Take photos** flow it would drop the performer into is
+already here.
 
 ![Example of a finished sheet](docs/screenshot-result.jpg)
 
@@ -113,9 +119,10 @@ real site:
    ]
    ```
 
-3. **Enforce the coordinator check server-side.** The UI hides coordinator tools from
-   non-coordinators, but that's cosmetic — the performer-search endpoint returns contact info,
-   so it must return `403` unless the session user really is a coordinator.
+3. **Enforce the coordinator check server-side.** The UI shows the coordinator search to
+   everyone and only makes it inert for performers — that's cosmetic. The performer-search
+   endpoint returns contact info, so it must return `403` unless the session user really is a
+   coordinator.
 
 Endpoint paths are configurable in `public/js/config.js` if you'd rather mount them elsewhere.
 
@@ -128,7 +135,6 @@ Everything below lives in `public/js/config.js` / CSS variables:
 - **JPEG vs PNG** — `output.format: 'image/png'` switches the export and the downloaded file
   extension; JPEG is the default because files are ~5× smaller and phones handle them everywhere.
 - **Look & feel** — colors are CSS variables at the top of `public/css/styles.css`.
-- **Position labels** on the final sheet ("FRONT", "LEFT SIDE"…) are a user-facing toggle.
 
 ## Files
 

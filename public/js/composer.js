@@ -9,11 +9,15 @@
 window.Composer = (function () {
   'use strict';
 
+  /*
+   * A LEFT side view means the camera sees your left ear, which puts the nose
+   * on the viewer's left — so 'left' uses the profile unmirrored.
+   */
   var SLOT_DEFS = [
-    { key: 'front', label: 'Front',      outline: 'front',   mirror: false },
-    { key: 'left',  label: 'Left side',  outline: 'profile', mirror: false },
-    { key: 'right', label: 'Right side', outline: 'profile', mirror: true  },
-    { key: 'back',  label: 'Back',       outline: 'front',   mirror: false }
+    { key: 'front', label: 'Front',      outline: 'front',   mirror: false, facing: '' },
+    { key: 'left',  label: 'Left side',  outline: 'profile', mirror: false, facing: 'left ear to camera' },
+    { key: 'right', label: 'Right side', outline: 'profile', mirror: true,  facing: 'right ear to camera' },
+    { key: 'back',  label: 'Back',       outline: 'front',   mirror: false, facing: '' }
   ];
 
   var FONT_STACK = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
@@ -93,17 +97,17 @@ window.Composer = (function () {
     ctx.fillRect(x, y, w, h);
 
     if (typeof Path2D !== 'undefined' && window.Outlines) {
-      var k = Math.min(w / Outlines.VIEW_W, h / Outlines.VIEW_H) * 0.62;
+      var k = Math.min(w / Outlines.VIEW_W, h / Outlines.VIEW_H) * 0.86;
       var ox = x + (w - Outlines.VIEW_W * k) / 2;
-      var oy = y + (h - Outlines.VIEW_H * k) / 2 - h * 0.03;
+      var oy = y + (h - Outlines.VIEW_H * k) / 2;
       var m = def.mirror
         ? new DOMMatrix([-k, 0, 0, k, ox + Outlines.VIEW_W * k, oy])
         : new DOMMatrix([k, 0, 0, k, ox, oy]);
       var path = new Path2D();
       path.addPath(new Path2D(Outlines.pathFor(def.outline)), m);
       ctx.strokeStyle = 'rgba(255,255,255,0.16)';
-      ctx.lineWidth = Math.max(3, w * 0.005);
-      ctx.setLineDash([w * 0.014, w * 0.016]);
+      ctx.lineWidth = Math.max(3, w * 0.006);
+      ctx.setLineDash([w * 0.016, w * 0.018]);
       ctx.lineCap = 'round';
       ctx.stroke(path);
       ctx.setLineDash([]);
@@ -127,12 +131,20 @@ window.Composer = (function () {
     }
   }
 
-  /* Shrink a font size until text fits maxWidth (or minPx is reached). */
-  function fitFont(ctx, text, weight, startPx, minPx, maxWidth) {
-    var px = startPx;
+  /*
+   * Pick the largest font size (up to maxPx) at which text still fits
+   * targetW — so short names render big and long ones step down, and either
+   * way the line reaches across the sheet.
+   */
+  function fitWidth(ctx, text, weight, targetW, minPx, maxPx, spacing) {
+    var px = maxPx;
     for (;;) {
+      if ('letterSpacing' in ctx) ctx.letterSpacing = (spacing || 0) + 'px';
       ctx.font = weight + ' ' + px + 'px ' + FONT_STACK;
-      if (ctx.measureText(text).width <= maxWidth || px <= minPx) return px;
+      if (ctx.measureText(text).width <= targetW || px <= minPx) {
+        if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+        return px;
+      }
       px -= 2;
     }
   }
@@ -196,13 +208,13 @@ window.Composer = (function () {
    *   ├─────────┼─────────┤
    *   │  RIGHT  │  BACK   │
    *   ├─────────────────────┤
-   *   │  NAME               │  ← white on black, below the photos
-   *   │  h • w • ph • email │
+   *   │  N A M E            │  ← white on black, full width, below the photos
+   *   │  h · w · ph · email │
    *   │  optional note      │
+   *   │  [CUT] [SHAVE]      │
    *   └─────────────────────┘
    */
-  function compose(slots, person, opts) {
-    opts = opts || {};
+  function compose(slots, person) {
     var out = (window.HAIRSELFIE_CONFIG && window.HAIRSELFIE_CONFIG.output) || {};
     var CW = out.cellWidth || 1000;
     var CH = out.cellHeight || 1250;
@@ -211,56 +223,67 @@ window.Composer = (function () {
 
     var W = M * 2 + CW * 2 + GUT;
     var gridH = CH * 2 + GUT;
-    var maxTextW = W - (M + 30) * 2;
-
+    var fullW = W - M * 2;                       // text runs the full image width
     var scratch = document.createElement('canvas').getContext('2d');
 
+    /* name — as large as it can be while spanning the sheet */
     var name = ((person && person.name) || '').trim().toUpperCase();
-    var nameSize = 0;
-    if (name) {
-      if ('letterSpacing' in scratch) scratch.letterSpacing = '6px';
-      nameSize = fitFont(scratch, name, '700', Math.round(CW * 0.092), 48, maxTextW);
-      if ('letterSpacing' in scratch) scratch.letterSpacing = '0px';
-    }
+    var nameSpacing = Math.round(CW * 0.007);
+    var nameSize = name
+      ? fitWidth(scratch, name, '800', fullW, 44, Math.round(CW * 0.23), nameSpacing)
+      : 0;
 
+    /* contact details — one line if they fit, otherwise two */
     var fields = ['height', 'weight', 'phone', 'email'].map(function (k) {
       return ((person && person[k]) || '').trim();
     }).filter(Boolean);
 
-    var SEP = '   •   ';
+    var SEP = '   ·   ';
+    var detailMax = Math.round(CW * 0.085);
     var detailLines = [];
     if (fields.length) {
       var one = fields.join(SEP);
-      var oneSize = fitFont(scratch, one, '400', Math.round(CW * 0.046), 38, maxTextW);
-      scratch.font = '400 ' + oneSize + 'px ' + FONT_STACK;
-      if (scratch.measureText(one).width <= maxTextW || fields.length === 1) {
+      var oneSize = fitWidth(scratch, one, '600', fullW, 30, detailMax, 0);
+      if (oneSize >= 40 || fields.length === 1) {
         detailLines = [{ text: one, size: oneSize }];
       } else {
-        var last = fields[fields.length - 1];
-        var first = fields.slice(0, -1).join(SEP);
-        detailLines = [
-          { text: first, size: fitFont(scratch, first, '400', Math.round(CW * 0.046), 38, maxTextW) },
-          { text: last,  size: fitFont(scratch, last,  '400', Math.round(CW * 0.046), 38, maxTextW) }
-        ];
+        var half = Math.ceil(fields.length / 2);
+        var a = fields.slice(0, half).join(SEP);
+        var b = fields.slice(half).join(SEP);
+        var sizeA = fitWidth(scratch, a, '600', fullW, 30, detailMax, 0);
+        var sizeB = fitWidth(scratch, b, '600', fullW, 30, detailMax, 0);
+        var both = Math.min(sizeA, sizeB);
+        detailLines = [{ text: a, size: both }, { text: b, size: both }];
       }
     }
 
-    /* optional short note, wrapped to at most two lines */
+    /* optional note */
     var noteText = ((person && person.note) || '').trim().replace(/\s+/g, ' ');
     var noteSize = 0;
     var noteLines = [];
-    var noteW = Math.min(maxTextW, Math.round(W * 0.84));
     if (noteText) {
-      noteSize = Math.round(CW * 0.040);
+      noteSize = Math.round(CW * 0.044);
       scratch.font = '400 ' + noteSize + 'px ' + FONT_STACK;
-      noteLines = wrapText(scratch, noteText, noteW, 2);
+      noteLines = wrapText(scratch, noteText, Math.round(fullW * 0.94), 2);
     }
 
-    var gapTop = Math.round(CW * 0.085);
-    var gapBottom = Math.round(CW * 0.09);
-    var lineGap = Math.round(CW * 0.022);
-    var noteGap = Math.round(CW * 0.036);
+    /* capability chips */
+    var chips = [];
+    if (person && person.canCut) chips.push('ABLE TO CUT HAIR');
+    if (person && person.canShave) chips.push('ABLE TO SHAVE');
+    var chipSize = Math.round(CW * 0.036);
+    var chipPadX = Math.round(chipSize * 0.85);
+    var chipH = Math.round(chipSize * 2.3);
+    var chipGap = Math.round(CW * 0.022);
+
+    /* vertical rhythm */
+    var gapTop = Math.round(CW * 0.075);
+    var gapBottom = Math.round(CW * 0.075);
+    var lineGap = Math.round(CW * 0.024);
+    var noteGap = Math.round(CW * 0.032);
     var noteLineGap = Math.round(noteSize * 0.34);
+    var chipGapTop = Math.round(CW * 0.038);
+
     var infoH = gapTop + gapBottom;
     if (nameSize) infoH += nameSize;
     if (nameSize && detailLines.length) infoH += lineGap;
@@ -273,7 +296,13 @@ window.Composer = (function () {
         infoH += noteSize + (i > 0 ? noteLineGap : 0);
       });
     }
-    if (!nameSize && !detailLines.length && !noteLines.length) infoH = Math.round(CW * 0.04);
+    if (chips.length) {
+      if (nameSize || detailLines.length || noteLines.length) infoH += chipGapTop;
+      infoH += chipH;
+    }
+    if (!nameSize && !detailLines.length && !noteLines.length && !chips.length) {
+      infoH = Math.round(CW * 0.04);
+    }
 
     var H = M + gridH + infoH;
 
@@ -291,42 +320,19 @@ window.Composer = (function () {
       var x = M + col * (CW + GUT);
       var y = M + row * (CH + GUT);
       var slot = slots[def.key];
-
-      if (slot && slot.img) {
-        drawSlot(ctx, slot, x, y, CW, CH);
-      } else {
-        drawPlaceholder(ctx, def, x, y, CW, CH);
-      }
-
-      if (opts.labels && slot && slot.img) {
-        var text = def.label.toUpperCase();
-        var fs = Math.round(CW * 0.036);
-        ctx.font = '700 ' + fs + 'px ' + FONT_STACK;
-        var tw = ctx.measureText(text).width;
-        var padX = Math.round(fs * 0.55);
-        var chipH = Math.round(fs * 1.7);
-        var cx = x + Math.round(CW * 0.024);
-        var cy = y + CH - chipH - Math.round(CW * 0.024);
-        ctx.fillStyle = 'rgba(0,0,0,0.62)';
-        roundRectPath(ctx, cx, cy, tw + padX * 2, chipH, Math.round(fs * 0.35));
-        ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(text, cx + padX, cy + chipH / 2 + fs * 0.06);
-        ctx.textBaseline = 'alphabetic';
-      }
+      if (slot && slot.img) drawSlot(ctx, slot, x, y, CW, CH);
+      else drawPlaceholder(ctx, def, x, y, CW, CH);
     });
 
-    /* info band — white text on the black background, below the photos */
+    /* ── info band: white on black, below the photos ── */
     var ty = M + gridH + gapTop;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillStyle = '#fff';
 
     if (nameSize) {
-      if ('letterSpacing' in ctx) ctx.letterSpacing = '6px';
-      ctx.font = '700 ' + nameSize + 'px ' + FONT_STACK;
+      if ('letterSpacing' in ctx) ctx.letterSpacing = nameSpacing + 'px';
+      ctx.font = '800 ' + nameSize + 'px ' + FONT_STACK;
+      ctx.fillStyle = '#fff';
       ctx.fillText(name, W / 2, ty);
       if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
       ty += nameSize + (detailLines.length ? lineGap : 0);
@@ -334,8 +340,8 @@ window.Composer = (function () {
 
     detailLines.forEach(function (l, i) {
       if (i > 0) ty += lineGap;
-      ctx.font = '400 ' + l.size + 'px ' + FONT_STACK;
-      ctx.fillStyle = 'rgba(255,255,255,0.92)';
+      ctx.font = '600 ' + l.size + 'px ' + FONT_STACK;
+      ctx.fillStyle = '#fff';
       ctx.fillText(l.text, W / 2, ty);
       ty += l.size;
     });
@@ -343,7 +349,7 @@ window.Composer = (function () {
     if (noteLines.length) {
       if (nameSize || detailLines.length) ty += noteGap;
       ctx.font = '400 ' + noteSize + 'px ' + FONT_STACK;
-      ctx.fillStyle = 'rgba(255,255,255,0.78)';
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
       noteLines.forEach(function (line, i) {
         if (i > 0) ty += noteLineGap;
         ctx.fillText(line, W / 2, ty);
@@ -351,12 +357,39 @@ window.Composer = (function () {
       });
     }
 
+    if (chips.length) {
+      if (nameSize || detailLines.length || noteLines.length) ty += chipGapTop;
+      ctx.font = '700 ' + chipSize + 'px ' + FONT_STACK;
+      var widths = chips.map(function (c) { return ctx.measureText(c).width + chipPadX * 2; });
+      var totalW = widths.reduce(function (a, b) { return a + b; }, 0) +
+                   chipGap * (chips.length - 1);
+      var cx = (W - totalW) / 2;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      chips.forEach(function (c, i) {
+        roundRectPath(ctx, cx, ty, widths[i], chipH, chipH / 2);
+        ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+        ctx.lineWidth = Math.max(2, CW * 0.0028);
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.fillText(c, cx + chipPadX, ty + chipH / 2 + chipSize * 0.05);
+        cx += widths[i] + chipGap;
+      });
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+    }
+
     return canvas;
+  }
+
+  function mimeType() {
+    var out = (window.HAIRSELFIE_CONFIG && window.HAIRSELFIE_CONFIG.output) || {};
+    return out.format || 'image/jpeg';
   }
 
   function toBlob(canvas) {
     var out = (window.HAIRSELFIE_CONFIG && window.HAIRSELFIE_CONFIG.output) || {};
-    var format = out.format || 'image/jpeg';
+    var format = mimeType();
     var quality = typeof out.quality === 'number' ? out.quality : 0.92;
     return new Promise(function (resolve, reject) {
       if (canvas.toBlob) {
@@ -379,8 +412,7 @@ window.Composer = (function () {
   }
 
   function fileExtension() {
-    var out = (window.HAIRSELFIE_CONFIG && window.HAIRSELFIE_CONFIG.output) || {};
-    return (out.format || 'image/jpeg') === 'image/png' ? 'png' : 'jpg';
+    return mimeType() === 'image/png' ? 'png' : 'jpg';
   }
 
   return {
@@ -390,6 +422,7 @@ window.Composer = (function () {
     clampPan: clampPan,
     compose: compose,
     toBlob: toBlob,
+    mimeType: mimeType,
     fileExtension: fileExtension
   };
 })();

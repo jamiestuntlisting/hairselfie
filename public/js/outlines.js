@@ -1,10 +1,23 @@
 /*
  * Passport-style head guides.
  *
- * Two stylized head-and-shoulders outlines drawn in a 400×500 box
- * (same 4:5 aspect as the photo cells):
- *   - 'front'   — facing the camera (also used for the back of the head)
- *   - 'profile' — side view, nose pointing left (mirrored for the right side)
+ * Both outlines are drawn in the same 400×500 box (the 4:5 aspect of a photo
+ * cell) on a shared skeleton, so the head is the same size and sits in the
+ * same place whichever position you are looking at:
+ *
+ *   cranium   x 100 → 300, y 62 → 332   (centred on x = 200)
+ *   neck      y 328 → 372
+ *   shoulders reach x 30 → 370 at y 488
+ *
+ * The profile only breaks that box where a face should — the nose pushes out
+ * to x ≈ 82 — which is what makes the facing direction readable at a glance.
+ *
+ *   'front'   — facing the camera (also used for the back of the head)
+ *   'profile' — side view with the nose pointing LEFT
+ *
+ * Which way should a side shot face? For a LEFT side view the camera sees
+ * your left ear, which puts your nose on the viewer's left — so the left
+ * slot uses the profile unmirrored, and the right slot mirrors it.
  */
 window.Outlines = (function () {
   'use strict';
@@ -12,49 +25,54 @@ window.Outlines = (function () {
   var VIEWBOX = '0 0 400 500';
 
   var FRONT_PATH = [
-    // head
-    'M200 56 C 254 56 292 106 292 174 C 292 248 252 306 200 306',
-    'C 148 306 108 248 108 174 C 108 106 146 56 200 56 Z',
+    // cranium
+    'M200 62 C 255 62 300 112 300 180 C 300 262 255 332 200 332',
+    'C 145 332 100 262 100 180 C 100 112 145 62 200 62 Z',
     // ears
-    'M108 190 C 94 182 86 202 98 220 C 103 227 108 230 112 230',
-    'M292 190 C 306 182 314 202 302 220 C 297 227 292 230 288 230',
+    'M100 190 C 84 181 75 203 89 223 C 95 231 100 235 105 235',
+    'M300 190 C 316 181 325 203 311 223 C 305 231 300 235 295 235',
     // neck
-    'M170 300 C 170 316 169 330 166 342',
-    'M230 300 C 230 316 231 330 234 342',
+    'M168 328 C 168 346 167 360 164 372',
+    'M232 328 C 232 346 233 360 236 372',
     // shoulders
-    'M166 342 C 118 352 66 382 42 452',
-    'M234 342 C 282 352 334 382 358 452'
+    'M164 372 C 118 383 60 410 30 488',
+    'M236 372 C 282 383 340 410 370 488'
   ].join(' ');
 
   var PROFILE_PATH = [
-    // crown → forehead → nose → lips → chin → jaw → throat
-    'M206 58 C 158 60 126 100 122 152 C 121 168 119 178 112 188',
-    'C 103 200 94 212 99 219 C 103 224 101 230 96 236',
-    'C 91 243 94 250 103 253 C 109 255 108 260 104 265',
-    'C 99 271 101 280 111 283 C 122 287 130 294 134 306',
-    'C 140 324 156 337 178 342 C 179 356 178 366 175 374',
-    // crown → back of skull → nape
-    'M206 58 C 262 60 298 110 298 176 C 298 234 285 268 268 292',
-    'C 266 310 268 327 275 342',
+    // back of the skull, crown → nape
+    'M200 62 C 255 62 300 112 300 180 C 300 240 285 285 262 308',
+    'C 258 322 260 340 268 356',
+    // face, crown → forehead → nose → lips → chin → jaw
+    'M200 62 C 148 64 108 110 104 168',
+    'C 103 182 100 192 92 202',
+    'C 84 213 82 226 90 233',
+    'C 96 238 94 244 89 250',
+    'C 83 257 87 265 97 268',
+    'C 104 271 103 277 99 283',
+    'C 92 292 97 312 112 318',
+    'C 126 326 140 332 168 335',
+    // front of the neck
+    'M168 335 C 170 350 169 362 166 372',
     // shoulders
-    'M175 374 C 140 384 90 404 64 462',
-    'M275 342 C 278 350 282 356 288 360 C 322 372 344 400 356 462',
+    'M166 372 C 120 383 62 410 32 488',
+    'M268 356 C 272 364 278 370 286 374 C 330 388 352 420 370 488',
     // ear
-    'M212 208 C 228 200 240 216 230 236 C 224 248 214 252 208 246'
+    'M208 190 C 226 184 238 204 228 226 C 221 240 209 243 203 236'
   ].join(' ');
 
   function pathFor(kind) {
     return kind === 'profile' ? PROFILE_PATH : FRONT_PATH;
   }
 
-  /* Inline SVG markup for a guide. mirror=true flips horizontally. */
+  /* Inline SVG markup for a guide. mirror=true flips it horizontally. */
   function svgMarkup(kind, mirror) {
     var transform = mirror ? ' transform="translate(400 0) scale(-1 1)"' : '';
     return (
       '<svg viewBox="' + VIEWBOX + '" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
       '<path d="' + pathFor(kind) + '"' + transform +
-      ' fill="none" stroke="currentColor" stroke-width="5"' +
-      ' stroke-dasharray="11 13" stroke-linecap="round" stroke-linejoin="round"/>' +
+      ' fill="none" stroke="currentColor" stroke-width="6"' +
+      ' stroke-dasharray="13 15" stroke-linecap="round" stroke-linejoin="round"/>' +
       '</svg>'
     );
   }

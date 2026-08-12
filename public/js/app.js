@@ -1,7 +1,7 @@
 /*
  * Hair Selfie — UI wiring.
  *
- * Photos are handled entirely in the browser: picked/dropped files are
+ * Photos are handled entirely in the browser: picked/captured files are
  * decoded locally, framed on canvas and exported as one JPEG. Nothing is
  * uploaded anywhere.
  */
@@ -15,14 +15,21 @@
   SLOT_DEFS.forEach(function (d) { defByKey[d.key] = d; });
 
   var LS_PREFS = 'hairselfie.prefs';
+  var DRAG_HOLD_MS = 280;   // long-press before a touch drag starts
+  var DRAG_SLOP = 8;        // px of movement that counts as a drag, not a tap
+
+  /* Profile fields — driven by the session user or a coordinator's pick.
+     The note and the cut/shave flags belong to the sheet, not the person,
+     so they are kept out of this list and survive a performer switch. */
+  var FIELDS = ['name', 'height', 'weight', 'phone', 'email'];
+  var NOTE_MAX = 140;
 
   var state = {
     slots: { front: null, left: null, right: null, back: null },
     me: {},
     coordinator: false,
     performer: null,     // coordinator-selected performer, or null = "me"
-    selectedKey: null,   // cell picked for tap-to-swap
-    labels: true
+    selectedKey: null    // cell picked for tap-to-swap
   };
 
   /* ── tiny helpers ────────────────────────────────────────────── */
@@ -54,27 +61,59 @@
   /* ── element refs ────────────────────────────────────────────── */
 
   var grid = $('#grid');
-  var fileMulti = $('#file-multi');
-  var fileSingle = $('#file-single');
   var infoForm = $('#info-form');
   var createBtn = $('#create-btn');
   var createStatus = $('#create-status');
   var resultBox = $('#result');
   var resultImg = $('#result-img');
   var downloadLink = $('#download-link');
+  var savePhotosBtn = $('#save-photos');
+  var saveHint = $('#save-hint');
   var noteInput = $('#f-note');
   var noteCount = $('#note-count');
+  var cutBox = $('#f-cut');
+  var shaveBox = $('#f-shave');
 
-  var cells = {};          // key → { root, canvas, guide, dragDepth }
-  var pendingSlot = null;  // slot waiting on the single-file picker
-  var dragSourceKey = null;
+  var cells = {};
   var resultUrl = null;
+  var resultBlob = null;
+  var resultName = 'hair-selfie.jpg';
+  var captureQueue = [];
 
-  /* Profile fields — driven by the session user or a coordinator's pick.
-     The note is deliberately not one of them: it belongs to the sheet, not
-     the person, so switching performers leaves it alone. */
-  var FIELDS = ['name', 'height', 'weight', 'phone', 'email'];
-  var NOTE_MAX = 140;
+  /*
+   * Always hand the browser a brand-new <input type="file">. Reusing one
+   * input (even after clearing .value) is unreliable on mobile Safari — the
+   * second pick often never fires 'change', which made "Add photos" look
+   * like it stopped working after the first use.
+   */
+  function pickFiles(opts) {
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    if (opts.multiple) input.multiple = true;
+    if (opts.capture) input.setAttribute('capture', 'environment');
+    input.style.cssText = 'position:fixed;left:-10000px;top:0;opacity:0';
+    document.body.appendChild(input);
+
+    var done = false;
+    function cleanup() {
+      if (done) return;
+      done = true;
+      if (input.parentNode) input.parentNode.removeChild(input);
+    }
+
+    input.addEventListener('change', function () {
+      if (input.files && input.files.length) opts.onFiles(input.files);
+      cleanup();
+    });
+    /* the picker being cancelled fires no event — tidy up on the way back */
+    window.addEventListener('focus', function later() {
+      window.removeEventListener('focus', later);
+      setTimeout(cleanup, 1200);
+    });
+
+    input.click();
+  }
 
   /* ── photo grid ──────────────────────────────────────────────── */
 
@@ -84,29 +123,27 @@
       root.className = 'cell';
       root.dataset.slot = def.key;
       root.setAttribute('role', 'button');
+      root.setAttribute('tabindex', '0');
       root.setAttribute('aria-label', def.label + ' photo position');
       root.innerHTML =
         '<canvas class="cell-canvas" aria-hidden="true"></canvas>' +
         '<div class="cell-empty">' +
           Outlines.svgMarkup(def.outline, def.mirror) +
           '<span class="cell-name">' + esc(def.label) + '</span>' +
-          '<span class="cell-cta">Tap to add photo</span>' +
+          (def.facing ? '<span class="cell-facing">' + esc(def.facing) + '</span>' : '') +
+          '<span class="cell-cta">Tap to add</span>' +
         '</div>' +
         '<div class="cell-guide">' + Outlines.svgMarkup(def.outline, def.mirror) + '</div>' +
         '<span class="cell-tag">' + esc(def.label) + '</span>' +
         '<div class="cell-tools">' +
-          '<button type="button" data-act="adjust" title="Adjust framing" aria-label="Adjust ' + esc(def.label) + ' photo">✎</button>' +
-          '<button type="button" data-act="rotate" title="Rotate 90°" aria-label="Rotate ' + esc(def.label) + ' photo">⟳</button>' +
-          '<button type="button" data-act="remove" title="Remove photo" aria-label="Remove ' + esc(def.label) + ' photo">✕</button>' +
+          '<button type="button" data-act="adjust" title="Adjust framing" aria-label="Adjust ' + esc(def.label) + '">✎</button>' +
+          '<button type="button" data-act="rotate" title="Rotate 90°" aria-label="Rotate ' + esc(def.label) + '">⟳</button>' +
+          '<button type="button" data-act="remove" title="Remove photo" aria-label="Remove ' + esc(def.label) + '">✕</button>' +
         '</div>' +
         '<span class="cell-swapbadge">Tap another spot to swap</span>';
 
       grid.appendChild(root);
-      cells[def.key] = {
-        root: root,
-        canvas: root.querySelector('.cell-canvas'),
-        dragDepth: 0
-      };
+      cells[def.key] = { root: root, canvas: root.querySelector('.cell-canvas'), dragDepth: 0 };
       wireCell(def.key);
     });
   }
@@ -114,12 +151,6 @@
   function wireCell(key) {
     var c = cells[key];
     var root = c.root;
-
-    root.addEventListener('click', function (e) {
-      var btn = e.target.closest ? e.target.closest('button[data-act]') : null;
-      if (btn) return; // tool buttons handle themselves
-      cellClicked(key);
-    });
 
     root.querySelectorAll('button[data-act]').forEach(function (btn) {
       btn.addEventListener('click', function (e) {
@@ -131,45 +162,161 @@
       });
     });
 
-    /* swap by native drag (desktop; iOS long-press drag also works) */
-    root.addEventListener('dragstart', function (e) {
-      if (!state.slots[key]) { e.preventDefault(); return; }
-      e.dataTransfer.setData('text/plain', 'hairselfie:' + key);
-      e.dataTransfer.effectAllowed = 'move';
-      dragSourceKey = key;
-    });
-    root.addEventListener('dragend', function () { dragSourceKey = null; });
+    root.addEventListener('pointerdown', function (e) { beginPointer(key, e); });
 
+    root.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cellClicked(key); }
+    });
+
+    /* dropping image files from a desktop file manager */
     root.addEventListener('dragenter', function (e) {
       e.preventDefault();
       c.dragDepth++;
       root.classList.add('dragover');
     });
-    root.addEventListener('dragover', function (e) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = dragSourceKey ? 'move' : 'copy';
-    });
+    root.addEventListener('dragover', function (e) { e.preventDefault(); });
     root.addEventListener('dragleave', function () {
-      if (--c.dragDepth <= 0) {
-        c.dragDepth = 0;
-        root.classList.remove('dragover');
-      }
+      if (--c.dragDepth <= 0) { c.dragDepth = 0; root.classList.remove('dragover'); }
     });
     root.addEventListener('drop', function (e) {
       e.preventDefault();
       e.stopPropagation();
       c.dragDepth = 0;
       root.classList.remove('dragover');
-      var dt = e.dataTransfer;
-      if (dt.files && dt.files.length) {
-        assignFiles(dt.files, key);
+      if (e.dataTransfer.files && e.dataTransfer.files.length) {
+        assignFiles(e.dataTransfer.files, key);
+      }
+    });
+  }
+
+  /* ── drag to rearrange (mouse + touch) ───────────────────────── */
+
+  var drag = null;
+
+  function beginPointer(key, e) {
+    if (e.button != null && e.button > 0) return;
+    if (e.target.closest && e.target.closest('button[data-act]')) return;
+    if (!state.slots[key]) { pendPick(key); return; }
+
+    var isTouch = e.pointerType === 'touch' || e.pointerType === 'pen';
+    drag = {
+      key: key, id: e.pointerId, x0: e.clientX, y0: e.clientY,
+      x: e.clientX, y: e.clientY, active: false, moved: false,
+      isTouch: isTouch, timer: null
+    };
+
+    if (isTouch) {
+      drag.timer = setTimeout(function () {
+        if (drag && !drag.moved) activateDrag();
+      }, DRAG_HOLD_MS);
+    }
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+  }
+
+  function activateDrag() {
+    if (!drag || drag.active) return;
+    drag.active = true;
+    clearSelection();
+
+    var src = cells[drag.key];
+    var rect = src.root.getBoundingClientRect();
+    var ghost = document.createElement('div');
+    ghost.className = 'drag-ghost';
+    ghost.style.width = rect.width + 'px';
+    ghost.style.height = rect.height + 'px';
+    var clone = src.canvas.cloneNode(false);
+    clone.getContext('2d').drawImage(src.canvas, 0, 0);
+    clone.style.width = '100%';
+    clone.style.height = '100%';
+    ghost.appendChild(clone);
+    document.body.appendChild(ghost);
+
+    drag.ghost = ghost;
+    drag.offX = drag.x - rect.left;
+    drag.offY = drag.y - rect.top;
+    src.root.classList.add('dragging');
+    document.body.classList.add('is-dragging');
+    positionGhost();
+  }
+
+  function positionGhost() {
+    if (!drag || !drag.ghost) return;
+    drag.ghost.style.transform =
+      'translate(' + (drag.x - drag.offX) + 'px,' + (drag.y - drag.offY) + 'px)';
+  }
+
+  function cellKeyUnder(x, y) {
+    if (drag && drag.ghost) drag.ghost.style.display = 'none';
+    var el = document.elementFromPoint(x, y);
+    if (drag && drag.ghost) drag.ghost.style.display = '';
+    var cell = el && el.closest ? el.closest('.cell') : null;
+    return cell ? cell.dataset.slot : null;
+  }
+
+  function highlightTarget(key) {
+    SLOT_KEYS.forEach(function (k) {
+      cells[k].root.classList.toggle('droptarget', !!key && k === key && k !== drag.key);
+    });
+  }
+
+  function onPointerMove(e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag.x = e.clientX;
+    drag.y = e.clientY;
+    var dist = Math.hypot(drag.x - drag.x0, drag.y - drag.y0);
+
+    if (!drag.active) {
+      if (dist > DRAG_SLOP) {
+        drag.moved = true;
+        if (drag.isTouch) {
+          clearTimeout(drag.timer);   // finger moved first → let the page scroll
+          endDrag(false);
+          return;
+        }
+        activateDrag();               // mouse drags start straight away
+      } else {
         return;
       }
-      var txt = dt.getData('text/plain') || '';
-      if (txt.indexOf('hairselfie:') === 0) {
-        var src = txt.slice('hairselfie:'.length);
-        if (src !== key && state.slots[src]) swapSlots(src, key);
-      }
+    }
+
+    e.preventDefault();
+    positionGhost();
+    highlightTarget(cellKeyUnder(drag.x, drag.y));
+  }
+
+  function onPointerUp(e) {
+    if (!drag || (e.pointerId != null && e.pointerId !== drag.id)) return;
+    var wasActive = drag.active;
+    var key = drag.key;
+    var target = wasActive ? cellKeyUnder(drag.x, drag.y) : null;
+    var tapped = !wasActive && !drag.moved;
+
+    endDrag(true);
+
+    if (wasActive && target && target !== key) swapSlots(key, target);
+    else if (tapped) cellClicked(key);
+  }
+
+  function endDrag(clearAll) {
+    if (!drag) return;
+    clearTimeout(drag.timer);
+    if (drag.ghost && drag.ghost.parentNode) drag.ghost.parentNode.removeChild(drag.ghost);
+    cells[drag.key].root.classList.remove('dragging');
+    document.body.classList.remove('is-dragging');
+    if (clearAll) SLOT_KEYS.forEach(function (k) { cells[k].root.classList.remove('droptarget'); });
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('pointercancel', onPointerUp);
+    drag = null;
+  }
+
+  function pendPick(key) {
+    pickFiles({
+      multiple: false,
+      onFiles: function (files) { assignFiles(files, key); }
     });
   }
 
@@ -183,8 +330,7 @@
       state.selectedKey = key;
       cells[key].root.classList.add('selected');
     } else {
-      pendingSlot = key;
-      fileSingle.click();
+      pendPick(key);
     }
   }
 
@@ -227,23 +373,19 @@
     var c = cells[key];
     var slot = state.slots[key];
     c.root.classList.toggle('occupied', !!slot);
-    c.root.draggable = !!slot;
     if (slot) {
       var dpr = Math.min(window.devicePixelRatio || 1, 2.5);
       var w = c.root.clientWidth, h = c.root.clientHeight;
       if (w && h) {
         c.canvas.width = Math.round(w * dpr);
         c.canvas.height = Math.round(h * dpr);
-        var ctx = c.canvas.getContext('2d');
-        Composer.drawSlot(ctx, slot, 0, 0, c.canvas.width, c.canvas.height);
+        Composer.drawSlot(c.canvas.getContext('2d'), slot, 0, 0, c.canvas.width, c.canvas.height);
       }
     }
   }
 
   function rerenderAll() {
-    SLOT_KEYS.forEach(function (k) {
-      if (state.slots[k]) renderCell(k);
-    });
+    SLOT_KEYS.forEach(function (k) { if (state.slots[k]) renderCell(k); });
   }
 
   /* ── files in ────────────────────────────────────────────────── */
@@ -262,6 +404,7 @@
     SLOT_KEYS.forEach(function (k) {
       if (k !== preferKey && !state.slots[k]) targets.push(k);
     });
+    /* everything full? start overwriting from the top so the button keeps working */
     SLOT_KEYS.forEach(function (k) {
       if (targets.indexOf(k) === -1 && targets.length < files.length) targets.push(k);
     });
@@ -281,12 +424,70 @@
       clearSelection();
       renderCell(key);
       updateCreateStatus();
+      advanceCapture(key);
     };
     img.onerror = function () {
       URL.revokeObjectURL(url);
-      alert('Couldn’t read “' + (file.name || 'that file') + '”.\nIf it’s a HEIC photo, this browser may not support it — try exporting it as JPEG or PNG.');
+      alert('Couldn’t read “' + (file.name || 'that file') + '”.\nIf it’s a HEIC photo, try exporting it as JPEG.');
     };
     img.src = url;
+  }
+
+  /* ── guided camera capture ───────────────────────────────────── */
+
+  function captureBar() { return $('#capture-bar'); }
+
+  function startCapture() {
+    var empties = SLOT_KEYS.filter(function (k) { return !state.slots[k]; });
+    captureQueue = empties.length ? empties : SLOT_KEYS.slice();
+    shootNext();
+  }
+
+  function shootNext() {
+    var key = captureQueue[0];
+    if (!key) { hideCaptureBar(); return; }
+    hideCaptureBar();
+    pickFiles({
+      multiple: false,
+      capture: true,
+      onFiles: function (files) { assignFiles(files, key); }
+    });
+  }
+
+  function advanceCapture(justFilled) {
+    if (!captureQueue.length) return;
+    var i = captureQueue.indexOf(justFilled);
+    if (i === -1) return;
+    captureQueue.splice(i, 1);
+    if (captureQueue.length) showCaptureBar(captureQueue[0]);
+    else hideCaptureBar();
+  }
+
+  function showCaptureBar(key) {
+    var def = defByKey[key];
+    var bar = captureBar();
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'capture-bar';
+      bar.className = 'capture-bar';
+      grid.parentNode.insertBefore(bar, grid);
+    }
+    bar.innerHTML =
+      '<span class="capture-next">Next: <b>' + esc(def.label) + '</b>' +
+      (def.facing ? ' — ' + esc(def.facing) : '') + '</span>' +
+      '<button type="button" class="btn btn-primary btn-small" id="capture-go">Take photo</button>' +
+      '<button type="button" class="btn btn-small" id="capture-stop">Done</button>';
+    bar.hidden = false;
+    $('#capture-go').addEventListener('click', shootNext);
+    $('#capture-stop').addEventListener('click', function () {
+      captureQueue = [];
+      hideCaptureBar();
+    });
+  }
+
+  function hideCaptureBar() {
+    var bar = captureBar();
+    if (bar) bar.hidden = true;
   }
 
   /* ── adjust modal ────────────────────────────────────────────── */
@@ -335,8 +536,7 @@
     var dpr = Math.min(window.devicePixelRatio || 1, 2.5);
     adjCanvas.width = Math.round(rect.width * dpr);
     adjCanvas.height = Math.round(rect.height * dpr);
-    var ctx = adjCanvas.getContext('2d');
-    Composer.drawSlot(ctx, adjustSlot, 0, 0, adjCanvas.width, adjCanvas.height);
+    Composer.drawSlot(adjCanvas.getContext('2d'), adjustSlot, 0, 0, adjCanvas.width, adjCanvas.height);
   }
 
   function setAdjustZoom(z) {
@@ -349,9 +549,7 @@
   }
 
   function wireAdjust() {
-    adjZoom.addEventListener('input', function () {
-      setAdjustZoom(adjZoom.value / 100);
-    });
+    adjZoom.addEventListener('input', function () { setAdjustZoom(adjZoom.value / 100); });
 
     $('#adjust-rotate').addEventListener('click', function () {
       if (!adjustSlot) return;
@@ -363,19 +561,14 @@
 
     $('#adjust-reset').addEventListener('click', function () {
       if (!adjustSlot) return;
-      adjustSlot.zoom = 1;
-      adjustSlot.panX = 0;
-      adjustSlot.panY = 0;
-      adjustSlot.rot = 0;
+      adjustSlot.zoom = 1; adjustSlot.panX = 0; adjustSlot.panY = 0; adjustSlot.rot = 0;
       adjZoom.value = 100;
       drawAdjust();
     });
 
     $('#adjust-done').addEventListener('click', function () { closeAdjust(true); });
     $('#adjust-cancel').addEventListener('click', function () { closeAdjust(false); });
-    modal.addEventListener('click', function (e) {
-      if (e.target === modal) closeAdjust(false);
-    });
+    modal.addEventListener('click', function (e) { if (e.target === modal) closeAdjust(false); });
 
     adjCanvas.addEventListener('pointerdown', function (e) {
       if (!adjustSlot) return;
@@ -423,26 +616,24 @@
     }, { passive: false });
   }
 
-  /* ── performer details / coordinator ─────────────────────────── */
+  /* ── performer details ───────────────────────────────────────── */
 
   function fillForm(p) {
-    FIELDS.forEach(function (k) {
-      infoForm.elements[k].value = (p && p[k]) || '';
-    });
+    FIELDS.forEach(function (k) { infoForm.elements[k].value = (p && p[k]) || ''; });
   }
 
   function readForm() {
     var o = {};
-    FIELDS.forEach(function (k) {
-      o[k] = infoForm.elements[k].value.trim();
-    });
+    FIELDS.forEach(function (k) { o[k] = infoForm.elements[k].value.trim(); });
     return o;
   }
 
-  /* Everything that gets printed on the sheet: profile fields plus the note. */
+  /* Everything printed on the sheet: profile fields, note and flags. */
   function readSheet() {
     var o = readForm();
     o.note = noteInput.value.trim();
+    o.canCut = cutBox.checked;
+    o.canShave = shaveBox.checked;
     return o;
   }
 
@@ -460,10 +651,7 @@
 
   function renderSessionChip(failed) {
     var chip = $('#session-chip');
-    if (failed) {
-      chip.textContent = 'Not signed in';
-      return;
-    }
+    if (failed) { chip.textContent = 'Not signed in'; return; }
     chip.innerHTML =
       'Signed in as <b>' + esc(state.me.name || 'Guest') + '</b>' +
       (state.coordinator ? '<span class="role-tag">Coordinator</span>' : '');
@@ -476,8 +664,7 @@
     var sel = $('#demo-role');
     sel.value = Api.getDemoRole() || 'performer';
 
-    /* Re-render in place rather than reloading, so switching roles keeps
-       the photos and anything already typed into the form. */
+    /* re-render in place, so switching roles keeps photos and typed details */
     sel.addEventListener('change', function () {
       Api.setDemoRole(sel.value);
       state.coordinator = sel.value === 'coordinator';
@@ -487,7 +674,7 @@
       }
       renderSessionChip();
       renderPerfSource();
-      renderCoordinatorBox();
+      renderCoordinator();
     });
   }
 
@@ -496,7 +683,6 @@
     if (state.performer) {
       el.innerHTML =
         'Creating for <b>' + esc(state.performer.name) + '</b>' +
-        '<span class="pill">coordinator selection</span>' +
         '<button class="btn btn-small" id="ps-reset" type="button">Switch back to me</button>';
       el.classList.add('show');
       $('#ps-reset').addEventListener('click', resetPerformer);
@@ -526,65 +712,65 @@
     var el = $('#coord-current');
     if (!el) return;
     if (state.performer) {
-      el.innerHTML =
-        'Creating for: <b>' + esc(state.performer.name) + '</b> ' +
-        '<button class="btn" id="coord-reset" type="button">Switch back to me</button>';
+      el.innerHTML = 'Creating for: <b>' + esc(state.performer.name) + '</b> ' +
+        '<button class="btn btn-small" id="coord-reset" type="button">Switch back to me</button>';
       $('#coord-reset').addEventListener('click', resetPerformer);
+    } else if (state.coordinator) {
+      el.innerHTML = 'Creating for: <b>You — ' + esc(state.me.name || 'yourself') + '</b>';
     } else {
-      el.innerHTML = 'Creating for: <b>You — ' + esc(state.me.name || 'yourself') + '</b> <span>(default)</span>';
+      el.innerHTML = '';
     }
   }
 
-  function renderCoordinatorBox() {
-    var box = $('#coordinator-box');
+  /*
+   * The coordinator panel is always visible. For a performer the search box
+   * stays there but is inert, and touching it explains why.
+   */
+  function renderCoordinator() {
+    var input = $('#perf-search');
+    var note = $('#coord-note');
+    var badge = $('#coord-badge');
+    var lock = $('#coord-lock');
 
+    badge.hidden = !state.coordinator;
+    lock.hidden = state.coordinator;
+    input.readOnly = !state.coordinator;
+    input.classList.toggle('is-locked', !state.coordinator);
     if (!state.coordinator) {
-      box.innerHTML =
-        '<div class="coord locked">' +
-        '<span class="lock" aria-hidden="true">🔒</span>' +
-        '<span><b>Coordinator tools.</b> Locked — sign in with a coordinator account to create sheets for other performers.</span>' +
-        '</div>';
-      return;
+      input.value = '';
+      closeList();
+    } else {
+      note.hidden = true;
     }
-
-    box.innerHTML =
-      '<div class="coord">' +
-        '<div class="coord-head">Coordinator tools <span class="coord-badge">Coordinator</span></div>' +
-        '<p class="hint">Making a sheet for someone else? Find them here — their details replace yours in the form above (you can still edit before creating).</p>' +
-        '<div class="ac-wrap">' +
-          '<input type="search" id="perf-search" placeholder="Start typing a performer’s name…" ' +
-                 'role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="perf-listbox" autocomplete="off">' +
-          '<div class="ac-list" id="perf-listbox" role="listbox" hidden></div>' +
-        '</div>' +
-        '<div class="coord-current" id="coord-current"></div>' +
-      '</div>';
-
     renderCoordCurrent();
-    wireAutocomplete();
+  }
+
+  var acItems = [];
+  var acResults = [];
+  var acIndex = -1;
+  var acSeq = 0;
+
+  function closeList() {
+    var list = $('#perf-listbox');
+    list.hidden = true;
+    list.innerHTML = '';
+    acItems = [];
+    acResults = [];
+    acIndex = -1;
+    $('#perf-search').setAttribute('aria-expanded', 'false');
   }
 
   function wireAutocomplete() {
     var input = $('#perf-search');
     var list = $('#perf-listbox');
-    var items = [];
-    var activeIndex = -1;
-    var searchSeq = 0;
-
-    function closeList() {
-      list.hidden = true;
-      list.innerHTML = '';
-      items = [];
-      activeIndex = -1;
-      input.setAttribute('aria-expanded', 'false');
-    }
 
     function renderList(results) {
+      acResults = results;
       if (!results.length) {
         list.innerHTML = '<div class="ac-empty">No performers match “' + esc(input.value.trim()) + '”</div>';
         list.hidden = false;
-        input.setAttribute('aria-expanded', 'true');
-        items = [];
-        activeIndex = -1;
+        acItems = [];
+        acIndex = -1;
         return;
       }
       list.innerHTML = results.map(function (p, i) {
@@ -596,10 +782,10 @@
       }).join('');
       list.hidden = false;
       input.setAttribute('aria-expanded', 'true');
-      items = Array.prototype.slice.call(list.querySelectorAll('.ac-item'));
-      activeIndex = -1;
-      items.forEach(function (el, i) {
-        el.addEventListener('pointerdown', function (e) { e.preventDefault(); }); // keep input focus
+      acItems = Array.prototype.slice.call(list.querySelectorAll('.ac-item'));
+      acIndex = -1;
+      acItems.forEach(function (el, i) {
+        el.addEventListener('pointerdown', function (e) { e.preventDefault(); });
         el.addEventListener('click', function () {
           selectPerformer(results[i]);
           input.value = results[i].name;
@@ -609,48 +795,52 @@
     }
 
     function setActive(i) {
-      if (!items.length) return;
-      activeIndex = (i + items.length) % items.length;
-      items.forEach(function (el, j) {
-        el.classList.toggle('active', j === activeIndex);
-      });
-      input.setAttribute('aria-activedescendant', 'ac-opt-' + activeIndex);
-      items[activeIndex].scrollIntoView({ block: 'nearest' });
+      if (!acItems.length) return;
+      acIndex = (i + acItems.length) % acItems.length;
+      acItems.forEach(function (el, j) { el.classList.toggle('active', j === acIndex); });
+      input.setAttribute('aria-activedescendant', 'ac-opt-' + acIndex);
+      acItems[acIndex].scrollIntoView({ block: 'nearest' });
     }
 
     var runSearch = debounce(function () {
+      if (!state.coordinator) return;
       var q = input.value.trim();
-      var seq = ++searchSeq;
+      var seq = ++acSeq;
       if (!q) { closeList(); return; }
       Api.searchPerformers(q).then(function (results) {
-        if (seq !== searchSeq) return;
+        if (seq !== acSeq) return;
         renderList(results);
       }).catch(function (err) {
-        if (seq !== searchSeq) return;
+        if (seq !== acSeq) return;
         list.innerHTML = '<div class="ac-empty">Search failed — ' + esc(err.message) + '</div>';
         list.hidden = false;
       });
     }, 170);
 
-    input.addEventListener('input', runSearch);
+    /* a locked box explains itself instead of silently doing nothing */
+    function lockedPoke(e) {
+      if (state.coordinator) return;
+      e.preventDefault();
+      $('#coord-note').hidden = false;
+      input.blur();
+    }
+    input.addEventListener('pointerdown', lockedPoke);
+    input.addEventListener('focus', function () {
+      if (!state.coordinator) { $('#coord-note').hidden = false; input.blur(); }
+    });
 
+    input.addEventListener('input', runSearch);
     input.addEventListener('keydown', function (e) {
       if (list.hidden) return;
-      if (e.key === 'ArrowDown') { e.preventDefault(); setActive(activeIndex + 1); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(activeIndex - 1); }
-      else if (e.key === 'Enter') {
-        if (activeIndex >= 0 && items[activeIndex]) { e.preventDefault(); items[activeIndex].click(); }
-      } else if (e.key === 'Escape') {
-        closeList();
-      }
+      if (e.key === 'ArrowDown') { e.preventDefault(); setActive(acIndex + 1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(acIndex - 1); }
+      else if (e.key === 'Enter' && acIndex >= 0 && acItems[acIndex]) { e.preventDefault(); acItems[acIndex].click(); }
+      else if (e.key === 'Escape') closeList();
     });
-
-    input.addEventListener('blur', function () {
-      setTimeout(closeList, 150);
-    });
+    input.addEventListener('blur', function () { setTimeout(closeList, 150); });
   }
 
-  /* ── create & download ───────────────────────────────────────── */
+  /* ── create, save & download ─────────────────────────────────── */
 
   function updateCreateStatus() {
     var missing = SLOT_DEFS.filter(function (d) { return !state.slots[d.key]; });
@@ -662,6 +852,14 @@
       createStatus.innerHTML = 'Still missing: <span class="warn">' +
         missing.map(function (d) { return esc(d.label); }).join(', ') +
         '</span>. You can create anyway — empty spots get a placeholder.';
+    }
+  }
+
+  function canSharePhotos(file) {
+    try {
+      return !!(navigator.canShare && navigator.share && navigator.canShare({ files: [file] }));
+    } catch (e) {
+      return false;
     }
   }
 
@@ -686,18 +884,30 @@
     createBtn.textContent = 'Creating…';
 
     return new Promise(function (resolve) { setTimeout(resolve, 30); })
-      .then(function () {
-        var canvas = Composer.compose(state.slots, person, { labels: state.labels });
-        return Composer.toBlob(canvas);
-      })
+      .then(function () { return Composer.toBlob(Composer.compose(state.slots, person)); })
       .then(function (blob) {
         if (resultUrl) URL.revokeObjectURL(resultUrl);
+        resultBlob = blob;
         resultUrl = URL.createObjectURL(blob);
         resultImg.src = resultUrl;
+
         var date = new Date().toISOString().slice(0, 10);
+        resultName = 'hair-selfie_' + (slugify(person.name) || 'performer') + '_' + date +
+                     '.' + Composer.fileExtension();
         downloadLink.href = resultUrl;
-        downloadLink.download =
-          'hair-selfie_' + (slugify(person.name) || 'performer') + '_' + date + '.' + Composer.fileExtension();
+        downloadLink.download = resultName;
+
+        var file = new File([blob], resultName, { type: Composer.mimeType() });
+        if (canSharePhotos(file)) {
+          savePhotosBtn.hidden = false;
+          downloadLink.classList.remove('btn-primary');
+          saveHint.textContent = 'Save to Photos puts it straight in your camera roll.';
+        } else {
+          savePhotosBtn.hidden = true;
+          downloadLink.classList.add('btn-primary');
+          saveHint.textContent = 'Tip: press and hold the image above to save it to your photos.';
+        }
+
         resultBox.hidden = false;
         requestAnimationFrame(function () {
           resultBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -716,49 +926,41 @@
       });
   }
 
+  function saveToPhotos() {
+    if (!resultBlob) return;
+    var file = new File([resultBlob], resultName, { type: Composer.mimeType() });
+    if (!canSharePhotos(file)) return;
+    navigator.share({ files: [file] }).catch(function (err) {
+      if (err && err.name === 'AbortError') return;   // user dismissed the sheet
+      console.error(err);
+      saveHint.textContent = 'Couldn’t open the share sheet — use Download image instead.';
+    });
+  }
+
   /* ── static wiring & init ────────────────────────────────────── */
 
   function loadPrefs() {
     var prefs = {};
     try { prefs = JSON.parse(localStorage.getItem(LS_PREFS)) || {}; } catch (e) { /* ignore */ }
     var guides = prefs.guides !== false;
-    state.labels = prefs.labels !== false;
     $('#toggle-guides').checked = guides;
-    $('#toggle-labels').checked = state.labels;
     grid.classList.toggle('guides-on', guides);
   }
 
   function savePrefs() {
     try {
-      localStorage.setItem(LS_PREFS, JSON.stringify({
-        guides: $('#toggle-guides').checked,
-        labels: $('#toggle-labels').checked
-      }));
+      localStorage.setItem(LS_PREFS, JSON.stringify({ guides: $('#toggle-guides').checked }));
     } catch (e) { /* ignore */ }
   }
 
   function wireStatic() {
-    $('#add-photos').addEventListener('click', function () { fileMulti.click(); });
-
-    fileMulti.addEventListener('change', function () {
-      assignFiles(fileMulti.files);
-      fileMulti.value = '';
+    $('#add-photos').addEventListener('click', function () {
+      pickFiles({ multiple: true, onFiles: function (files) { assignFiles(files); } });
     });
-
-    fileSingle.addEventListener('change', function () {
-      if (fileSingle.files.length && pendingSlot) {
-        assignFiles(fileSingle.files, pendingSlot);
-      }
-      pendingSlot = null;
-      fileSingle.value = '';
-    });
+    $('#take-photos').addEventListener('click', startCapture);
 
     $('#toggle-guides').addEventListener('change', function (e) {
       grid.classList.toggle('guides-on', e.target.checked);
-      savePrefs();
-    });
-    $('#toggle-labels').addEventListener('change', function (e) {
-      state.labels = e.target.checked;
       savePrefs();
     });
 
@@ -767,25 +969,24 @@
       if (!state.performer) state.me = Object.assign({}, state.me, readForm());
       persistProfile();
     });
-
     noteInput.addEventListener('input', updateNoteCount);
     updateNoteCount();
 
     createBtn.addEventListener('click', doCreate);
-    $('#back-to-edit').addEventListener('click', function () {
-      $('#photos-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
+    savePhotosBtn.addEventListener('click', saveToPhotos);
 
-    /* don’t let stray drops navigate the page away; drop on the grid
-       gutter fills empty slots in order */
+    /* stray drops shouldn't navigate the page away */
     window.addEventListener('dragover', function (e) { e.preventDefault(); });
     window.addEventListener('drop', function (e) { e.preventDefault(); });
     grid.addEventListener('drop', function (e) {
       e.preventDefault();
-      if (e.dataTransfer.files && e.dataTransfer.files.length) {
-        assignFiles(e.dataTransfer.files);
-      }
+      if (e.dataTransfer.files && e.dataTransfer.files.length) assignFiles(e.dataTransfer.files);
     });
+
+    /* stop the page scrolling once a touch drag has taken hold */
+    grid.addEventListener('touchmove', function (e) {
+      if (drag && drag.active) e.preventDefault();
+    }, { passive: false });
 
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') {
@@ -796,11 +997,10 @@
 
     if (window.ResizeObserver) {
       var raf = 0;
-      var ro = new ResizeObserver(function () {
+      new ResizeObserver(function () {
         cancelAnimationFrame(raf);
         raf = requestAnimationFrame(rerenderAll);
-      });
-      ro.observe(grid);
+      }).observe(grid);
     } else {
       window.addEventListener('resize', debounce(rerenderAll, 150));
     }
@@ -811,6 +1011,7 @@
     loadPrefs();
     wireStatic();
     wireAdjust();
+    wireAutocomplete();
     updateCreateStatus();
 
     Api.getSession().then(function (session) {
@@ -819,7 +1020,7 @@
       fillForm(state.me);
       renderSessionChip();
       renderDemoBanner();
-      renderCoordinatorBox();
+      renderCoordinator();
       renderPerfSource();
     }).catch(function (err) {
       console.error('session failed', err);
@@ -827,7 +1028,7 @@
       state.coordinator = false;
       renderSessionChip(true);
       renderDemoBanner();
-      renderCoordinatorBox();
+      renderCoordinator();
     });
   }
 
@@ -836,6 +1037,7 @@
     state: state,
     renderCell: renderCell,
     assignFiles: assignFiles,
+    swapSlots: swapSlots,
     doCreate: doCreate
   };
 

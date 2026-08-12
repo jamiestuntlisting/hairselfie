@@ -130,14 +130,6 @@ main {
 .hint .ok { color: var(--ok); font-weight: 600; }
 .hint .warn { color: var(--warn); font-weight: 600; }
 
-.footer {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 8px 18px 42px;
-  color: var(--muted);
-  font-size: 12.5px;
-}
-
 /* ── Buttons & inputs ────────────────────────────────────────────── */
 
 .btn {
@@ -240,18 +232,23 @@ input:focus-visible, select:focus-visible, .btn:focus-visible {
 .cell-empty {
   position: absolute;
   inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 10px;
+  display: grid;
+  place-items: center;
+  padding: 8px;
   text-align: center;
 }
+.cell-empty svg { grid-area: 1 / 1; }
+.cell-empty .cell-name,
+.cell-empty .cell-facing,
+.cell-empty .cell-cta { grid-area: 1 / 1; }
+.cell-empty .cell-name { align-self: end; transform: translateY(-2.6em); }
+.cell-empty .cell-facing { align-self: end; transform: translateY(-1.35em); }
+.cell-empty .cell-cta { align-self: end; }
 .cell.occupied .cell-empty { display: none; }
-.cell-empty svg { width: 58%; height: auto; color: #4a5160; }
-.cell-empty .cell-name { font-size: 14.5px; font-weight: 700; color: #aab2c0; }
-.cell-empty .cell-cta { font-size: 12px; color: #626a78; }
+.cell-empty svg { width: 88%; height: auto; color: #545c6b; }
+.cell-empty .cell-name { font-size: 15px; font-weight: 700; color: #ccd3de; }
+.cell-empty .cell-facing { font-size: 11.5px; font-weight: 600; color: var(--accent); letter-spacing: 0.2px; }
+.cell-empty .cell-cta { font-size: 11.5px; color: #6d7685; }
 
 /* faint guide over a placed photo (toggleable) */
 .cell-guide {
@@ -263,7 +260,7 @@ input:focus-visible, select:focus-visible, .btn:focus-visible {
   pointer-events: none;
 }
 .cell-guide svg {
-  width: 58%;
+  width: 88%;
   height: auto;
   color: rgba(255, 255, 255, 0.5);
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9));
@@ -521,7 +518,7 @@ input:focus-visible, select:focus-visible, .btn:focus-visible {
   pointer-events: none;
 }
 .adjust-guide svg {
-  width: 58%;
+  width: 88%;
   height: auto;
   color: rgba(255, 255, 255, 0.6);
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9));
@@ -555,3 +552,100 @@ input:focus-visible, select:focus-visible, .btn:focus-visible {
   .session-chip { max-width: 46vw; }
   .result-actions .btn { flex: 1 1 auto; }
 }
+
+
+/* ── Drag to rearrange ───────────────────────────────────────────── */
+
+.cell.occupied { touch-action: manipulation; }
+.cell.dragging { opacity: 0.32; }
+.cell.droptarget {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 90, 54, 0.6) inset;
+}
+
+body.is-dragging { user-select: none; -webkit-user-select: none; }
+
+.drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 80;
+  pointer-events: none;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6);
+  outline: 2px solid var(--accent);
+  opacity: 0.94;
+}
+.drag-ghost canvas { width: 100%; height: 100%; }
+
+/* ── Guided capture ──────────────────────────────────────────────── */
+
+.capture-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 11px 13px;
+  background: #221a14;
+  border: 1px solid rgba(255, 90, 54, 0.45);
+  border-radius: 12px;
+  font-size: 14px;
+  color: var(--text);
+}
+.capture-bar .capture-next { flex: 1 1 auto; }
+.capture-bar b { color: var(--accent); }
+
+/* ── Coordinator panel ───────────────────────────────────────────── */
+
+.panel-head-plain { margin-bottom: 2px; }
+.panel-head-plain h2 { flex: 0 0 auto; }
+
+.coord-badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--warn);
+  border: 1px solid #4a3c1e;
+  background: #241d10;
+  padding: 2px 8px 3px;
+  border-radius: 999px;
+}
+.coord-lockicon { font-size: 15px; opacity: 0.75; }
+
+input[type="search"].is-locked {
+  color: var(--muted);
+  cursor: pointer;
+  background: #0e1015;
+}
+
+.locked-note {
+  margin: 9px 0 0;
+  padding: 9px 12px;
+  background: #241d10;
+  border: 1px solid #4a3c1e;
+  border-radius: 10px;
+  color: var(--warn);
+  font-size: 13px;
+}
+
+/* ── Capability checkboxes ───────────────────────────────────────── */
+
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  margin-top: 2px;
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14.5px;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+.check input { accent-color: var(--accent); width: 18px; height: 18px; }
