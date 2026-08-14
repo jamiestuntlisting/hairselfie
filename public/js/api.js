@@ -2,14 +2,16 @@
  * Session + performer roster adapter.
  *
  * The rest of the app only ever calls:
- *   HairSelfieApi.getSession()          → Promise<{ user, coordinator }>
+ *   HairSelfieApi.getSession()          → Promise<{ user, coordinator, signedOut }>
  *   HairSelfieApi.searchPerformers(q)   → Promise<[{id,name,height,weight,phone,email}, …]>
+ *   HairSelfieApi.getPerformer(token)   → Promise<{id,name,…}>
+ *   HairSelfieApi.login(email, pass)    → Promise
  *
  * In 'demo' mode everything is local: the profile lives in localStorage and
  * the roster below stands in for the StuntListing performer directory.
- * In 'stuntlisting' mode the same two calls hit the endpoints configured in
- * js/config.js (with cookies, same-origin). Swapping modes changes nothing
- * else in the app.
+ * In 'stuntlisting' mode the same calls go to StuntListing's GraphQL API
+ * through js/graphql.js, authenticated with a Bearer token. Swapping modes
+ * changes nothing else in the app.
  */
 window.HairSelfieApi = (function () {
   'use strict';
@@ -124,6 +126,12 @@ window.HairSelfieApi = (function () {
       return hit ? delay(90, hit) : Promise.reject(new Error('performer not found'));
     },
 
+    login: function () {
+      return Promise.reject(new Error('Sign-in is only available once connected to StuntListing'));
+    },
+
+    signOut: function () { /* nothing to sign out of in demo mode */ },
+
     /* demo-only helpers used by the UI */
     saveLocalProfile: function (profile) {
       try {
@@ -142,46 +150,59 @@ window.HairSelfieApi = (function () {
 
   /* ── real StuntListing implementation ────────────────────────── */
 
+  /*
+   * Talks to StuntListing's GraphQL API via js/graphql.js. The documents
+   * themselves live there; this layer only reshapes results into the
+   * { id, name, height, weight, phone, email } shape the UI works in.
+   */
   var live = {
     isDemo: false,
 
     getSession: function () {
-      return fetch(cfg.endpoints.session, { credentials: 'include' })
-        .then(function (res) {
-          if (!res.ok) throw new Error('session request failed: ' + res.status);
-          return res.json();
-        })
-        .then(function (data) {
-          return {
-            user: data.user || {},
-            coordinator: !!data.coordinator
-          };
-        });
+      var GQL = window.StuntListingGQL;
+      if (!GQL.isSignedIn()) {
+        return Promise.resolve({ user: {}, coordinator: false, signedOut: true });
+      }
+      return GQL.request(GQL.QUERIES.me).then(function (data) {
+        var me = (data && data.getMyProfile) || {};
+        return {
+          user: {
+            id: me.id,
+            name: me.name || '',
+            height: me.height || '',
+            weight: me.weight || '',
+            phone: me.phone || '',
+            email: me.email || ''
+          },
+          /* TODO confirm how the schema marks a coordinator. */
+          coordinator: !!(me.isCoordinator || me.is_coordinator)
+        };
+      });
     },
 
     searchPerformers: function (q) {
-      var url = cfg.endpoints.performerSearch +
-        (cfg.endpoints.performerSearch.indexOf('?') === -1 ? '?' : '&') +
-        'q=' + encodeURIComponent(q || '');
-      return fetch(url, { credentials: 'include' })
-        .then(function (res) {
-          if (!res.ok) throw new Error('performer search failed: ' + res.status);
-          return res.json();
-        })
-        .then(function (list) {
-          return Array.isArray(list) ? list : (list.performers || []);
+      var GQL = window.StuntListingGQL;
+      return GQL.request(GQL.QUERIES.searchPerformers, { q: q })
+        .then(function (data) {
+          return (data && data.searchPerformers) || [];
         });
     },
 
-    getPerformer: function (id) {
-      var url = (cfg.endpoints.performer || '').replace('{id}', encodeURIComponent(id));
-      return fetch(url, { credentials: 'include' })
-        .then(function (res) {
-          if (!res.ok) throw new Error('performer lookup failed: ' + res.status);
-          return res.json();
-        })
-        .then(function (data) { return data.performer || data; });
+    getPerformer: function (token) {
+      var GQL = window.StuntListingGQL;
+      return GQL.request(GQL.QUERIES.performer, { token: token })
+        .then(function (data) {
+          var p = data && data.hairSelfieRequest && data.hairSelfieRequest.performer;
+          if (!p) throw new Error('request link not recognised');
+          return p;
+        });
     },
+
+    login: function (email, password) {
+      return window.StuntListingGQL.login(email, password);
+    },
+
+    signOut: function () { window.StuntListingGQL.signOut(); },
 
     saveLocalProfile: function () { /* server owns the profile in live mode */ },
     getDemoRole: function () { return null; },

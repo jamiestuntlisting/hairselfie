@@ -13,13 +13,26 @@
 window.HAIRSELFIE_CONFIG = {
   mode: 'demo',
 
-  endpoints: {
-    // GET → { user: {id,name,height,weight,phone,email}, coordinator: true|false }
-    session: '/api/hair-selfie/session',
-    // GET ?q=<query> → [ {id,name,…}, … ]           (coordinator only)
-    performerSearch: '/api/hair-selfie/performers',
-    // GET → { id,name,height,weight,phone,email }   (one performer, by id)
-    performer: '/api/hair-selfie/performers/{id}'
+  /* StuntListing's GraphQL API. Every document sent to it lives in
+     js/graphql.js — correct them there against the real schema. */
+  graphqlUrl: 'https://api.stuntlisting.com/graphql',
+
+  auth: {
+    /* Where the access token is kept in the browser. The mobile app uses
+       these same names in SecureStore. */
+    tokenKey: 'STL_token',
+    refreshKey: 'STL_refresh',
+
+    /* A token can be handed to this page as ?token=… (stripped from the URL
+       immediately) or by postMessage from a WebView host. List the origins
+       allowed to post one; an empty list accepts any, which is only safe if
+       the page is never embedded by anyone else. */
+    tokenParam: 'token',
+    tokenOrigins: ['https://stuntlisting.com', 'https://www.stuntlisting.com'],
+
+    /* Show an email/password sign-in when there is no token yet. Turn this
+       off if the page is only ever opened with a token handed in. */
+    allowPasswordLogin: true
   },
 
   /*
