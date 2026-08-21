@@ -724,3 +724,19 @@ input[type="search"].is-locked {
 .send-status { margin: 8px 0 0; font-size: 12.5px; color: var(--ok); min-height: 1em; }
 
 #save-image { margin-top: 2px; }
+
+/* ── Auto-arrange notice ─────────────────────────────────────────── */
+
+.arrange-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 13px;
+  background: #10131a;
+  border: 1px solid var(--line-soft);
+  border-radius: 11px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.arrange-bar span { flex: 1 1 auto; }

@@ -15,6 +15,8 @@ JPEG.
   **Add photos** picks from the library (all four at once, in order).
 - **Drag to rearrange** — press and hold a photo on a phone, or just drag with a mouse, and
   drop it on another position to swap. Tapping one photo then another swaps them too.
+- **Works out which photo is which** — add four at once and it sorts them into front, sides and
+  back for you, then says so and offers Undo. See below.
 - **Passport-style head guides** — a large dashed head-and-shoulders outline in every position.
   Side shots say which way to face in plain terms: a *left side* view means your **left ear is
   toward the camera**, so the nose points to the left of frame. A faint guide stays over placed
@@ -35,6 +37,29 @@ JPEG.
   names the performer, fills in their details and goes straight to the camera.
 - **Private by design** — photos are composed entirely in the browser with canvas.
   Nothing is uploaded.
+
+## Sorting the photos automatically
+
+Add several photos at once and the app tries to put them in the right positions.
+
+Three cues do the work: **no face at all** means the back of the head; a face with the **nose
+centred** is the front; a face with the **nose pushed to one side** is that side's profile. Left
+versus right is the hard one and the one people get wrong — a *left* side view shows the left
+ear, so the nose sits on the left of frame. That needs real landmarks, so the app measures where
+the nose tip falls between the two edges of the jaw.
+
+Rather than judging each photo alone, it scores every photo against every position and picks the
+best whole arrangement (each position gets exactly one photo). That constraint rescues cases
+where a single guess is shaky.
+
+It **arranges but never asserts**: it only moves things when reasonably confident, tells you it
+did, and one tap puts it back. No detector is reliable on a head that is half hair, so a wrong
+guess should cost a tap rather than a re-upload.
+
+Detection runs on [face-api.js](https://github.com/vladmandic/face-api) (MIT), vendored under
+`public/vendor/face-api` — no CDN, so it works under a strict CSP and keeps photos on the device.
+It is **loaded only when you add photos in bulk** (about 1.6 MB, cached afterwards), so the
+camera flow and request links never wait for it.
 
 ## Not built yet
 

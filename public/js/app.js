@@ -399,9 +399,9 @@
       /\.(jpe?g|png|webp|gif|bmp|avif|heic|heif)$/i.test(file.name || '');
   }
 
-  function assignFiles(fileList, preferKey) {
+  function assignFiles(fileList, preferKey, done) {
     var files = Array.prototype.slice.call(fileList).filter(looksLikeImage);
-    if (!files.length) return;
+    if (!files.length) { if (done) done(); return; }
 
     var targets = [];
     if (preferKey) targets.push(preferKey);
@@ -413,12 +413,16 @@
       if (targets.indexOf(k) === -1 && targets.length < files.length) targets.push(k);
     });
 
-    files.slice(0, targets.length).forEach(function (f, i) {
-      setSlotImage(targets[i], f);
+    var chosen = files.slice(0, targets.length);
+    var pending = chosen.length;
+    chosen.forEach(function (f, i) {
+      setSlotImage(targets[i], f, function () {
+        if (--pending === 0 && done) done();
+      });
     });
   }
 
-  function setSlotImage(key, file) {
+  function setSlotImage(key, file, done) {
     var url = URL.createObjectURL(file);
     var img = new Image();
     img.onload = function () {
@@ -429,12 +433,87 @@
       renderCell(key);
       updateCreateStatus();
       advanceCapture(key);
+      if (done) done();
     };
     img.onerror = function () {
       URL.revokeObjectURL(url);
       alert('Couldn’t read “' + (file.name || 'that file') + '”.\nIf it’s a HEIC photo, try exporting it as JPEG.');
+      if (done) done();
     };
     img.src = url;
+  }
+
+  /* ── work out which photo is which ───────────────────────────── */
+
+  var arrangeUndo = null;
+
+  /*
+   * Only ever runs after a bulk add — the camera flow already knows which
+   * angle is which, so it never pays the download. Arranges, says so, and
+   * leaves an undo: a wrong guess should cost one tap, not a re-upload.
+   */
+  function autoArrange() {
+    if (!window.HairSelfieDetect) return;
+    var filled = SLOT_KEYS.filter(function (k) { return state.slots[k]; });
+    if (filled.length < 2) return;
+
+    var before = {};
+    SLOT_KEYS.forEach(function (k) { before[k] = state.slots[k]; });
+    var photos = filled.map(function (k) { return state.slots[k]; });
+
+    showArrangeBar('Checking which photo is which…', false);
+
+    HairSelfieDetect.classify(photos.map(function (p) { return p.img; }))
+      .then(function (res) {
+        if (!res) { hideArrangeBar(); return; }
+
+        var next = { front: null, left: null, right: null, back: null };
+        HairSelfieDetect.SLOTS.forEach(function (slot) {
+          var i = res.order[slot];
+          if (i != null && photos[i]) next[slot] = photos[i];
+        });
+
+        var changed = SLOT_KEYS.some(function (k) { return next[k] !== before[k]; });
+        if (res.confidence < 0.35 || !changed) {
+          hideArrangeBar();
+          return;
+        }
+
+        state.slots = next;
+        arrangeUndo = before;
+        SLOT_KEYS.forEach(renderCell);
+        updateCreateStatus();
+        showArrangeBar('Arranged these for you — worth a check.', true);
+      })
+      .catch(function () { hideArrangeBar(); });
+  }
+
+  function showArrangeBar(message, withUndo) {
+    var bar = $('#arrange-bar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'arrange-bar';
+      bar.className = 'arrange-bar';
+      grid.parentNode.insertBefore(bar, grid.nextSibling);
+    }
+    bar.hidden = false;
+    bar.innerHTML = '<span>' + esc(message) + '</span>' +
+      (withUndo ? '<button type="button" class="btn btn-small" id="arrange-undo">Undo</button>' : '');
+    if (withUndo) {
+      $('#arrange-undo').addEventListener('click', function () {
+        if (!arrangeUndo) return;
+        state.slots = arrangeUndo;
+        arrangeUndo = null;
+        SLOT_KEYS.forEach(renderCell);
+        updateCreateStatus();
+        hideArrangeBar();
+      });
+    }
+  }
+
+  function hideArrangeBar() {
+    var bar = $('#arrange-bar');
+    if (bar) bar.hidden = true;
   }
 
   /* ── guided camera capture ───────────────────────────────────── */
@@ -1063,7 +1142,12 @@
 
   function wireStatic() {
     $('#add-photos').addEventListener('click', function () {
-      pickFiles({ multiple: true, onFiles: function (files) { assignFiles(files); } });
+      pickFiles({
+        multiple: true,
+        onFiles: function (files) {
+          assignFiles(files, null, autoArrange);
+        }
+      });
     });
     $('#take-photos').addEventListener('click', startCapture);
 
@@ -1167,6 +1251,7 @@
     renderCell: renderCell,
     assignFiles: assignFiles,
     swapSlots: swapSlots,
+    autoArrange: autoArrange,
     doCreate: doCreate
   };
 
