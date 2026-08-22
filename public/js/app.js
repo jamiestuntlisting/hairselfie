@@ -27,8 +27,6 @@
   var state = {
     slots: { front: null, left: null, right: null, back: null },
     me: {},
-    coordinator: false,
-    performer: null,     // coordinator-selected performer, or null = "me"
     selectedKey: null,   // cell picked for tap-to-swap
     requestFor: null     // performer this page was opened for, via a request link
   };
@@ -752,7 +750,7 @@
   }
 
   var persistProfile = debounce(function () {
-    if (Api.isDemo && !state.performer) {
+    if (Api.isDemo && !state.requestFor) {
       Api.saveLocalProfile(Object.assign({ id: 'demo-me' }, readForm()));
     }
   }, 350);
@@ -760,180 +758,7 @@
   function renderSessionChip(failed) {
     var chip = $('#session-chip');
     if (failed) { chip.textContent = 'Not signed in'; return; }
-    chip.innerHTML =
-      'Signed in as <b>' + esc(state.me.name || 'Guest') + '</b>' +
-      (state.coordinator ? '<span class="role-tag">Coordinator</span>' : '');
-  }
-
-  function renderDemoBanner() {
-    var banner = $('#demo-banner');
-    if (!Api.isDemo) { banner.hidden = true; return; }
-    banner.hidden = false;
-    var sel = $('#demo-role');
-    sel.value = Api.getDemoRole() || 'performer';
-
-    /* re-render in place, so switching roles keeps photos and typed details */
-    sel.addEventListener('change', function () {
-      Api.setDemoRole(sel.value);
-      state.coordinator = sel.value === 'coordinator';
-      if (!state.coordinator && state.performer) {
-        state.performer = null;
-        fillForm(state.me);
-      }
-      renderSessionChip();
-      renderCoordinator();
-    });
-  }
-
-  function selectPerformer(p) {
-    state.performer = p;
-    fillForm(p);
-    setDetailsOpen(false);
-    renderCoordCurrent();
-    renderSendBox();
-  }
-
-  function resetPerformer() {
-    state.performer = null;
-    fillForm(state.me);
-    setDetailsOpen(false);
-    renderCoordCurrent();
-    renderSendBox();
-    var search = $('#perf-search');
-    if (search) search.value = '';
-  }
-
-  function renderCoordCurrent() {
-    var el = $('#coord-current');
-    if (!el) return;
-    if (state.performer) {
-      el.innerHTML = 'Creating for: <b>' + esc(state.performer.name) + '</b> ' +
-        '<button class="btn btn-small" id="coord-reset" type="button">Switch back to me</button>';
-      $('#coord-reset').addEventListener('click', resetPerformer);
-    } else if (state.coordinator) {
-      el.innerHTML = 'Creating for: <b>You — ' + esc(state.me.name || 'yourself') + '</b>';
-    } else {
-      el.innerHTML = '';
-    }
-  }
-
-  /*
-   * The coordinator panel is always visible. For a performer the search box
-   * stays there but is inert, and touching it explains why.
-   */
-  function renderCoordinator() {
-    var input = $('#perf-search');
-    var note = $('#coord-note');
-    var badge = $('#coord-badge');
-    var lock = $('#coord-lock');
-
-    badge.hidden = !state.coordinator;
-    lock.hidden = state.coordinator;
-    input.readOnly = !state.coordinator;
-    input.classList.toggle('is-locked', !state.coordinator);
-    if (!state.coordinator) {
-      input.value = '';
-      closeList();
-    } else {
-      note.hidden = true;
-    }
-    renderCoordCurrent();
-    renderSendBox();
-  }
-
-  var acItems = [];
-  var acResults = [];
-  var acIndex = -1;
-  var acSeq = 0;
-
-  function closeList() {
-    var list = $('#perf-listbox');
-    list.hidden = true;
-    list.innerHTML = '';
-    acItems = [];
-    acResults = [];
-    acIndex = -1;
-    $('#perf-search').setAttribute('aria-expanded', 'false');
-  }
-
-  function wireAutocomplete() {
-    var input = $('#perf-search');
-    var list = $('#perf-listbox');
-
-    function renderList(results) {
-      acResults = results;
-      if (!results.length) {
-        list.innerHTML = '<div class="ac-empty">No performers match “' + esc(input.value.trim()) + '”</div>';
-        list.hidden = false;
-        acItems = [];
-        acIndex = -1;
-        return;
-      }
-      list.innerHTML = results.map(function (p, i) {
-        var meta = [p.height, p.weight].filter(Boolean).join(' · ');
-        return '<button type="button" class="ac-item" role="option" id="ac-opt-' + i + '">' +
-          '<span>' + esc(p.name) + '</span>' +
-          (meta ? '<span class="ac-meta">' + esc(meta) + '</span>' : '') +
-          '</button>';
-      }).join('');
-      list.hidden = false;
-      input.setAttribute('aria-expanded', 'true');
-      acItems = Array.prototype.slice.call(list.querySelectorAll('.ac-item'));
-      acIndex = -1;
-      acItems.forEach(function (el, i) {
-        el.addEventListener('pointerdown', function (e) { e.preventDefault(); });
-        el.addEventListener('click', function () {
-          selectPerformer(results[i]);
-          input.value = results[i].name;
-          closeList();
-        });
-      });
-    }
-
-    function setActive(i) {
-      if (!acItems.length) return;
-      acIndex = (i + acItems.length) % acItems.length;
-      acItems.forEach(function (el, j) { el.classList.toggle('active', j === acIndex); });
-      input.setAttribute('aria-activedescendant', 'ac-opt-' + acIndex);
-      acItems[acIndex].scrollIntoView({ block: 'nearest' });
-    }
-
-    var runSearch = debounce(function () {
-      if (!state.coordinator) return;
-      var q = input.value.trim();
-      var seq = ++acSeq;
-      if (!q) { closeList(); return; }
-      Api.searchPerformers(q).then(function (results) {
-        if (seq !== acSeq) return;
-        renderList(results);
-      }).catch(function (err) {
-        if (seq !== acSeq) return;
-        list.innerHTML = '<div class="ac-empty">Search failed — ' + esc(err.message) + '</div>';
-        list.hidden = false;
-      });
-    }, 170);
-
-    /* a locked box explains itself instead of silently doing nothing */
-    function lockedPoke(e) {
-      if (state.coordinator) return;
-      e.preventDefault();
-      $('#coord-note').hidden = false;
-      input.blur();
-    }
-    input.addEventListener('pointerdown', lockedPoke);
-    input.addEventListener('focus', function () {
-      if (!state.coordinator) { $('#coord-note').hidden = false; input.blur(); }
-    });
-
-    input.addEventListener('input', runSearch);
-    input.addEventListener('keydown', function (e) {
-      if (list.hidden) return;
-      if (e.key === 'ArrowDown') { e.preventDefault(); setActive(acIndex + 1); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(acIndex - 1); }
-      else if (e.key === 'Enter' && acIndex >= 0 && acItems[acIndex]) { e.preventDefault(); acItems[acIndex].click(); }
-      else if (e.key === 'Escape') closeList();
-    });
-    input.addEventListener('blur', function () { setTimeout(closeList, 150); });
+    chip.innerHTML = 'Signed in as <b>' + esc(state.me.name || 'Guest') + '</b>';
   }
 
   /* ── request links ───────────────────────────────────────────── */
@@ -948,75 +773,9 @@
     }
   }
 
-  /* Only the performer id travels in the link — details are fetched, so no
-     contact information ends up sitting in someone's text messages. */
-  function requestLinkFor(performer) {
-    var url = new URL(window.location.href);
-    url.hash = '';
-    url.search = '';
-    url.searchParams.set(REQ_PARAM, performer.id);
-    return url.toString();
-  }
-
-  function smsHref(performer, link) {
-    var first = String(performer.name || '').split(' ')[0] || 'there';
-    var body = 'Hi ' + first + ' — please send four hair photos (front, both sides, back) ' +
-               'for the shoot. Takes a minute on your phone: ' + link;
-    var num = String(performer.phone || '').replace(/[^0-9+]/g, '');
-    /* "?&body=" is the spelling that works on both iOS and Android */
-    return 'sms:' + num + '?&body=' + encodeURIComponent(body);
-  }
-
-  function renderSendBox() {
-    var box = $('#send-box');
-    if (!box) return;
-    if (!state.coordinator || !state.performer) {
-      box.hidden = true;
-      box.innerHTML = '';
-      return;
-    }
-    var p = state.performer;
-    var link = requestLinkFor(p);
-    box.hidden = false;
-    box.innerHTML =
-      '<div class="send-head">Ask ' + esc(String(p.name).split(' ')[0]) +
-        ' to take the photos</div>' +
-      '<p class="hint hint-small">They open this link and go straight to the camera — ' +
-        'their details are already filled in.</p>' +
-      '<div class="send-link" id="send-link">' + esc(link) + '</div>' +
-      '<div class="send-actions">' +
-        (p.phone ? '<a class="btn btn-primary btn-small" id="send-sms" href="' + esc(smsHref(p, link)) + '">Text ' + esc(String(p.name).split(' ')[0]) + '</a>' : '') +
-        '<button class="btn btn-small" id="send-copy" type="button">Copy link</button>' +
-        '<button class="btn btn-small" id="send-share" type="button" hidden>Share</button>' +
-      '</div>' +
-      '<p class="send-status" id="send-status" aria-live="polite"></p>';
-
-    $('#send-copy').addEventListener('click', function () {
-      var status = $('#send-status');
-      var done = function () { status.textContent = 'Link copied.'; };
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(link).then(done, function () {
-          status.textContent = 'Copy failed — select the link above.';
-        });
-      } else {
-        status.textContent = 'Select the link above to copy it.';
-      }
-    });
-
-    if (navigator.share) {
-      var shareBtn = $('#send-share');
-      shareBtn.hidden = false;
-      shareBtn.addEventListener('click', function () {
-        navigator.share({ title: 'Hair Selfie', text: 'Please send four hair photos', url: link })
-          .catch(function () { /* dismissed */ });
-      });
-    }
-  }
-
   /* Opened from a request link: show who it is for and prefill their info. */
   function enterRequestMode(performer) {
     state.requestFor = performer;
-    state.performer = null;
     fillForm(performer);
     setDetailsOpen(false);
 
@@ -1026,7 +785,6 @@
       '<b>Hair selfie requested for ' + esc(performer.name) + '</b>' +
       '<span>Take four photos of your hair — front, both sides and back — then hit Create.</span>';
 
-    $('#coord-panel').hidden = true;
     $('#session-chip').hidden = true;
   }
 
@@ -1161,7 +919,7 @@
 
     infoForm.addEventListener('submit', function (e) { e.preventDefault(); });
     infoForm.addEventListener('input', function () {
-      if (!state.performer && !state.requestFor) {
+      if (!state.requestFor) {
         state.me = Object.assign({}, state.me, readForm());
       }
       renderSummary();
@@ -1214,26 +972,19 @@
     loadPrefs();
     wireStatic();
     wireAdjust();
-    wireAutocomplete();
     updateCreateStatus();
 
     var reqId = requestedPerformerId();
 
     Api.getSession().then(function (session) {
       state.me = session.user || {};
-      state.coordinator = !!session.coordinator;
       fillForm(state.me);
       renderSessionChip();
-      renderDemoBanner();
-      renderCoordinator();
       setDetailsOpen(!state.me.name);
     }).catch(function (err) {
       console.error('session failed', err);
       state.me = {};
-      state.coordinator = false;
       renderSessionChip(true);
-      renderDemoBanner();
-      renderCoordinator();
       setDetailsOpen(true);
     }).then(function () {
       if (!reqId) return;
@@ -1253,7 +1004,6 @@
   /* exposed for integration debugging and automated tests */
   window.HairSelfie = {
     state: state,
-    requestLinkFor: requestLinkFor,
     setDetailsOpen: setDetailsOpen,
     renderCell: renderCell,
     assignFiles: assignFiles,

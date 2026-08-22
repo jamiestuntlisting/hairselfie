@@ -25,16 +25,6 @@
   <div id="session-chip" class="session-chip" aria-live="polite"></div>
 </header>
 
-<div id="demo-banner" class="demo-banner" hidden>
-  <span>Demo mode — not connected to StuntListing yet.</span>
-  <label>View as
-    <select id="demo-role">
-      <option value="performer">Performer</option>
-      <option value="coordinator">Coordinator</option>
-    </select>
-  </label>
-</div>
-
 <!-- shown when the page was opened from a coordinator's request link -->
 <div id="request-banner" class="request-banner" hidden></div>
 
@@ -106,25 +96,6 @@
       <label class="check"><input type="checkbox" id="f-cut"> Able to cut hair</label>
       <label class="check"><input type="checkbox" id="f-shave"> Able to shave</label>
     </div>
-  </section>
-
-  <!-- ── Coordinator ─────────────────────────────────────────────── -->
-  <section class="panel" id="coord-panel">
-    <div class="panel-head panel-head-plain">
-      <h2>Coordinator tools</h2>
-      <span id="coord-badge" class="coord-badge" hidden>Coordinator</span>
-      <span id="coord-lock" class="coord-lockicon" aria-hidden="true">🔒</span>
-    </div>
-
-    <div class="ac-wrap">
-      <input type="search" id="perf-search" placeholder="Search performers by name…"
-             role="combobox" aria-expanded="false" aria-autocomplete="list"
-             aria-controls="perf-listbox" autocomplete="off">
-      <div class="ac-list" id="perf-listbox" role="listbox" hidden></div>
-    </div>
-    <p id="coord-note" class="locked-note" hidden>This tool is locked — coordinators only.</p>
-    <div class="coord-current" id="coord-current"></div>
-    <div class="send-box" id="send-box" hidden></div>
   </section>
 
   <!-- ── Create ──────────────────────────────────────────────────── -->

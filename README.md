@@ -28,9 +28,8 @@ JPEG.
   Details fill themselves in from the signed-in StuntListing profile.
 - **Optional note** — a short line (up to 140 characters) under the details.
 - **Able to cut hair / Able to shave** — tick either and it prints as a pill on the sheet.
-- **Coordinator tools** — always visible, above the performer details. Coordinators get an
-  autocomplete performer search that swaps that performer's details into the sheet; everyone
-  else sees the box explain that it's coordinators only when they touch it.
+- **Two pages** — `index.html` is the performer view and the default; `coordinator.html` is the
+  coordinator view, which opens on a performer search and does one job: send someone a request.
 - **Save image** — one button. On a phone the share sheet offers *Save Image*, which puts the
   sheet in the camera roll rather than Files; on desktop it downloads.
 - **Request links** — a coordinator finds a performer and gets a link to text them. Opening it
@@ -84,8 +83,13 @@ python3 -m http.server 8000 -d public
 Opening `public/index.html` straight from disk works too.
 
 Out of the box it runs in **demo mode**: your profile is kept in this browser's localStorage and
-the performer search uses a built-in fictional roster. The banner at the top lets you flip
-between *Performer* and *Coordinator* views to try both experiences.
+the performer search uses a built-in fictional roster.
+
+- `/index.html` — the performer view (the default page)
+- `/coordinator.html` — the coordinator view
+
+In demo mode the coordinator page simply *is* the coordinator view, so it can be tried without a
+login. Against a live session it checks `coordinator` and locks the search otherwise.
 
 ## Deploying to Cloudflare
 
@@ -140,12 +144,14 @@ same person shape.
 
 ### Both entry points
 
-The same page serves both tools; what a person sees follows from `session`.
+Two pages, so StuntListing can link each from the right place in its own menu.
 
-- **Performer tool** — link to it plainly. They get their own details prefilled and four photo
-  slots.
-- **Coordinator tool** — the same link. Because `coordinator` comes back `true`, the search box
-  unlocks and the send-a-request panel appears.
+- **Performer tool** → `/index.html`. Their own details prefilled and four photo slots. No
+  coordinator UI at all.
+- **Coordinator tool** → `/coordinator.html`. Opens on the performer search. Picking someone
+  produces the request link plus Text / Copy / Share, and a **Build it myself** link that opens
+  the performer page prefilled for them. If `session.coordinator` is false the search is inert
+  and says why.
 
 ### Request links (the textable one)
 
@@ -190,13 +196,17 @@ Everything below lives in `public/js/config.js` / CSS variables:
 
 | File | What it is |
 | --- | --- |
-| `public/index.html` | The page: photo grid, details form, coordinator box, adjust dialog |
+| `public/index.html` | Performer page: photo grid, details, create, adjust dialog |
+| `public/coordinator.html` | Coordinator page: performer search and request links |
 | `public/css/styles.css` | All styling (dark theme) |
 | `public/js/config.js` | Mode, endpoint paths, output size/format |
 | `public/js/api.js` | Session + performer search adapter (demo and live implementations) |
 | `public/js/outlines.js` | The dashed passport-style head guides (front + profile SVG paths) |
 | `public/js/composer.js` | Canvas rendering: shared photo-framing math and final-sheet composition |
-| `public/js/app.js` | UI wiring: uploads, drag/swap, adjust dialog, autocomplete, create/download |
+| `public/js/app.js` | Performer page wiring: uploads, drag/swap, adjust, create/save |
+| `public/js/coordinator.js` | Coordinator page wiring: search, request links, SMS/copy/share |
+| `public/js/detect.js` | Works out which photo is front / side / back |
+| `public/vendor/face-api/` | Vendored face detector and weights (MIT) |
 | `wrangler.jsonc` | Cloudflare Workers static-assets config |
 | `.github/workflows/deploy.yml` | Auto-deploy to Cloudflare on push |
 

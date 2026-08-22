@@ -740,3 +740,15 @@ input[type="search"].is-locked {
   color: var(--muted);
 }
 .arrange-bar span { flex: 1 1 auto; }
+
+/* ── Coordinator page ────────────────────────────────────────────── */
+
+.panel-search { padding-top: 16px; }
+
+.search-big {
+  font-size: 17px !important;
+  padding: 14px 15px !important;
+  border-radius: 12px !important;
+}
+.panel-search .hint-small { margin-top: 10px; }
+.tagline .coord-badge { margin-left: 6px; }
