@@ -187,8 +187,11 @@
       e.stopPropagation();
       c.dragDepth = 0;
       root.classList.remove('dragover');
-      if (e.dataTransfer.files && e.dataTransfer.files.length) {
-        assignFiles(e.dataTransfer.files, key);
+      var files = e.dataTransfer.files;
+      if (files && files.length) {
+        /* one file onto a cell is a deliberate placement — leave it alone.
+           A batch is a bulk add that happened to land on a cell. */
+        assignFiles(files, key, files.length > 1 ? autoArrange : null);
       }
     });
   }
@@ -1176,7 +1179,11 @@
     window.addEventListener('drop', function (e) { e.preventDefault(); });
     grid.addEventListener('drop', function (e) {
       e.preventDefault();
-      if (e.dataTransfer.files && e.dataTransfer.files.length) assignFiles(e.dataTransfer.files);
+      var files = e.dataTransfer.files;
+      if (!files || !files.length) return;
+      /* dropping a batch (e.g. four dragged out of Photos) gets sorted the
+         same way the Add photos button does */
+      assignFiles(files, null, files.length > 1 ? autoArrange : null);
     });
 
     /* stop the page scrolling once a touch drag has taken hold */
