@@ -752,3 +752,20 @@ input[type="search"].is-locked {
 }
 .panel-search .hint-small { margin-top: 10px; }
 .tagline .coord-badge { margin-left: 6px; }
+
+/* ── Sign in ─────────────────────────────────────────────────────── */
+
+.signin-form { display: grid; gap: 10px; max-width: 340px; }
+.signin-panel input[type="password"] {
+  width: 100%;
+  background: #101218;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 15px;
+  font-family: inherit;
+}
+.send-status.is-error { color: #ff9b83; }
+.sample-note { margin: 10px 0 0; font-size: 12px; color: #6d7685; }
+.sample-note a { color: var(--muted); }

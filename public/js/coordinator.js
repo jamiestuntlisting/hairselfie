@@ -201,6 +201,16 @@
         ? 'Signed in as <b>' + esc(user.name) + '</b>'
         : '';
       $('#coord-badge').hidden = !isCoordinator;
+
+      /* Say plainly where these names come from, right where they appear —
+         these are invented until the app is pointed at the real directory. */
+      if (Api.mode !== 'stuntlisting') {
+        var note = document.createElement('p');
+        note.className = 'sample-note';
+        note.innerHTML = 'Showing <b>sample performers</b>, not StuntListing. ' +
+          '<a href="?api=live">Connect to StuntListing</a>';
+        $('#perf-search').closest('.panel').appendChild(note);
+      }
       input.readOnly = !isCoordinator;
       input.classList.toggle('is-locked', !isCoordinator);
 

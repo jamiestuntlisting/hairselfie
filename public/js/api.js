@@ -20,6 +20,32 @@ window.HairSelfieApi = (function () {
 
   var LS_PROFILE = 'hairselfie.demo.profile';
   var LS_ROLE = 'hairselfie.demo.role';
+  var LS_MODE = 'hairselfie.mode';
+
+  /*
+   * Which backend to talk to. config.js sets the default, but ?api=live and
+   * ?api=demo override it and stick — so the deployed page can be pointed at
+   * the real StuntListing API without a code change and a redeploy.
+   */
+  function resolveMode() {
+    var mode = cfg.mode || 'demo';
+    try {
+      var q = new URLSearchParams(window.location.search).get('api');
+      if (q === 'live' || q === 'stuntlisting') {
+        localStorage.setItem(LS_MODE, 'stuntlisting');
+        return 'stuntlisting';
+      }
+      if (q === 'demo') {
+        localStorage.setItem(LS_MODE, 'demo');
+        return 'demo';
+      }
+      var saved = localStorage.getItem(LS_MODE);
+      if (saved) return saved;
+    } catch (e) { /* no storage — fall back to the configured mode */ }
+    return mode;
+  }
+
+  var MODE = resolveMode();
 
   /* Fictional roster for demo mode — replaced by the real StuntListing
      directory in 'stuntlisting' mode. */
@@ -209,5 +235,7 @@ window.HairSelfieApi = (function () {
     setDemoRole: function () { /* not applicable */ }
   };
 
-  return cfg.mode === 'stuntlisting' ? live : demo;
+  var impl = MODE === 'stuntlisting' ? live : demo;
+  impl.mode = MODE;
+  return impl;
 })();
