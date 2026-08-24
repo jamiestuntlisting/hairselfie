@@ -1,0 +1,13 @@
+/* Styles used only by the coordinator page. */
+
+.who-row {
+  display: grid;
+  grid-template-columns: 1fr 140px;
+  gap: 12px;
+}
+.field-narrow input { font-variant-numeric: tabular-nums; }
+.who-row + .send-status { color: var(--ok); }
+
+@media (max-width: 520px) {
+  .who-row { grid-template-columns: 1fr; }
+}
