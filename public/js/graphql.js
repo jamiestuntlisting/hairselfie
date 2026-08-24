@@ -14,7 +14,8 @@
  * What is NOT confirmed and is marked TODO below: the field names on the
  * profile, whether a coordinator flag exists, and whether a performer search
  * query exists at all. Those are guesses shaped to look like the two
- * documents we have seen; check them before trusting them.
+ * documents we have seen; check them before trusting them — introspect()
+ * at the bottom of this file will tell you.
  */
 window.StuntListingGQL = (function () {
   'use strict';
@@ -181,6 +182,47 @@ window.StuntListingGQL = (function () {
       });
   }
 
+  /*
+   * Ask the API what it actually offers.
+   *
+   * Four of the documents above are guesses, because the schema has never
+   * been seen from here. Run this in the browser console against the real
+   * API and it answers the question directly:
+   *
+   *   await StuntListingGQL.introspect('search')
+   *
+   * With no filter it lists every query field. Returns [] and explains
+   * itself if introspection is switched off in production, which is common.
+   */
+  function introspect(filter) {
+    var doc = [
+      'query Introspect {',
+      '  __schema {',
+      '    queryType { fields { name args { name } } }',
+      '  }',
+      '}'
+    ].join('\n');
+
+    return request(doc).then(function (data) {
+      var fields = (((data || {}).__schema || {}).queryType || {}).fields || [];
+      var list = fields.map(function (f) {
+        return f.name + '(' + (f.args || []).map(function (a) { return a.name; }).join(', ') + ')';
+      });
+      if (filter) {
+        var needle = String(filter).toLowerCase();
+        list = list.filter(function (n) { return n.toLowerCase().indexOf(needle) !== -1; });
+      }
+      list.sort();
+      console.log(list.length + ' query field(s)' + (filter ? ' matching "' + filter + '"' : '') + ':');
+      list.forEach(function (n) { console.log('  ' + n); });
+      return list;
+    }).catch(function (err) {
+      console.warn('Introspection unavailable: ' + err.message +
+        ' — it is often disabled in production. The schema will have to come from the code.');
+      return [];
+    });
+  }
+
   adoptTokenFromUrl();
   listenForHostToken();
 
@@ -191,6 +233,7 @@ window.StuntListingGQL = (function () {
     login: login,
     signOut: signOut,
     accessToken: accessToken,
-    isSignedIn: isSignedIn
+    isSignedIn: isSignedIn,
+    introspect: introspect
   };
 })();
