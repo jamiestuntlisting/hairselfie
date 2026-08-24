@@ -91,8 +91,8 @@ window.HairSelfieApi = (function () {
 
   /*
    * Stands in for the signed-in StuntListing profile. In 'stuntlisting' mode
-   * these values come from the session endpoint, which is what makes the
-   * details form fill itself in.
+   * these values come from getMyProfile, which is what makes the details
+   * form fill itself in.
    */
   function defaultProfile() {
     return {
@@ -122,7 +122,7 @@ window.HairSelfieApi = (function () {
     });
   }
 
-  /* ── demo implementation ─────────────────────────────────────── */
+  /* ── demo implementation ────────────────────────────────────── */
 
   var demo = {
     isDemo: true,
@@ -174,13 +174,50 @@ window.HairSelfieApi = (function () {
     }
   };
 
-  /* ── real StuntListing implementation ────────────────────────── */
+  /*
+   * StuntListing's user shape → the { id, name, height, weight, phone, email }
+   * the UI works in. Confirmed against the app's own getMyProfile and
+   * listDetails queries:
+   *   - there is no single `name`; it is first_name + last_name, with alias
+   *     alongside as a professional name
+   *   - phone comes both raw and formatted — the formatted one is for people
+   *   - inside a list a user carries both `id` (the membership row) and
+   *     `user_id` (the actual user), so user_id wins where present
+   */
+  function toPerson(u) {
+    if (!u) return {};
+    var full = [u.first_name, u.last_name].filter(Boolean).join(' ').trim();
+    var id = u.user_id != null ? u.user_id : u.id;
+    return {
+      id: id == null ? '' : String(id),
+      name: full || u.alias || '',
+      alias: u.alias || '',
+      height: u.height || '',
+      weight: u.weight || '',
+      phone: u.phone_number_formatted || u.phone_number || '',
+      email: u.email || '',
+      hairColor: u.hair_color || ''
+    };
+  }
 
   /*
-   * Talks to StuntListing's GraphQL API via js/graphql.js. The documents
-   * themselves live there; this layer only reshapes results into the
-   * { id, name, height, weight, phone, email } shape the UI works in.
+   * TODO confirm what `role` actually contains. The profile has a role field
+   * rather than the boolean this app first assumed, but its values have not
+   * been seen — so match loosely and keep the list configurable rather than
+   * guess at one exact string.
    */
+  var COORDINATOR_ROLES = (cfg.coordinator && cfg.coordinator.roles) ||
+    ['coordinator', 'admin'];
+
+  function roleIsCoordinator(role) {
+    var r = String(role || '').toLowerCase();
+    return COORDINATOR_ROLES.some(function (candidate) {
+      return r.indexOf(String(candidate).toLowerCase()) !== -1;
+    });
+  }
+
+  /* ── real StuntListing implementation ────────────────────────── */
+
   var live = {
     isDemo: false,
 
@@ -192,35 +229,45 @@ window.HairSelfieApi = (function () {
       return GQL.request(GQL.QUERIES.me).then(function (data) {
         var me = (data && data.getMyProfile) || {};
         return {
-          user: {
-            id: me.id,
-            name: me.name || '',
-            height: me.height || '',
-            weight: me.weight || '',
-            phone: me.phone || '',
-            email: me.email || ''
-          },
-          /* TODO confirm how the schema marks a coordinator. */
-          coordinator: !!(me.isCoordinator || me.is_coordinator)
+          user: toPerson(me),
+          coordinator: roleIsCoordinator(me.role),
+          role: me.role || ''
         };
       });
     },
 
     searchPerformers: function (q) {
       var GQL = window.StuntListingGQL;
-      return GQL.request(GQL.QUERIES.searchPerformers, { q: q })
+      return GQL.request(GQL.QUERIES.searchPerformers, { search: q })
         .then(function (data) {
-          return (data && data.searchPerformers) || [];
+          /* take whichever root field the server answered with */
+          var list = null;
+          Object.keys(data || {}).some(function (k) {
+            if (Array.isArray(data[k])) { list = data[k]; return true; }
+            return false;
+          });
+          return (list || []).map(toPerson);
         });
     },
 
-    getPerformer: function (token) {
+    /* Members of one of the coordinator's lists, as an alternative to a
+       global search. */
+    listPerformers: function (listId) {
       var GQL = window.StuntListingGQL;
-      return GQL.request(GQL.QUERIES.performer, { token: token })
+      return GQL.request(GQL.QUERIES.listDetails, { list_id: parseInt(listId, 10) })
         .then(function (data) {
-          var p = data && data.hairSelfieRequest && data.hairSelfieRequest.performer;
-          if (!p) throw new Error('request link not recognised');
-          return p;
+          var details = (data && data.listDetails) || {};
+          return (details.users || []).map(toPerson);
+        });
+    },
+
+    getPerformer: function (id) {
+      var GQL = window.StuntListingGQL;
+      return GQL.request(GQL.QUERIES.performer, { user_id: parseInt(id, 10) })
+        .then(function (data) {
+          var u = data && (data.userDetails || data.getUser || data.user);
+          if (!u) throw new Error('performer not found');
+          return toPerson(u);
         });
     },
 
@@ -237,5 +284,8 @@ window.HairSelfieApi = (function () {
 
   var impl = MODE === 'stuntlisting' ? live : demo;
   impl.mode = MODE;
+  /* pure helpers, exposed for tests */
+  impl.toPerson = toPerson;
+  impl.roleIsCoordinator = roleIsCoordinator;
   return impl;
 })();
