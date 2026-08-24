@@ -66,9 +66,10 @@ window.StuntListingGQL = (function () {
     ].join('\n'),
 
     /* TODO still a guess — the one document we have not seen. The user table
-       has a fullTextSearch column, so search is implemented server-side and a
-       resolver for it exists; only its name and argument should need
-       correcting here. The field selection is the real user shape. */
+       has a fullTextSearch column holding that row's columns concatenated, so
+       search is a substring match over it: one free-text argument, no field
+       list. Only the resolver's name and that argument should need correcting
+       here; the field selection is the real user shape. */
     searchPerformers: [
       'query searchUsers($search: String!) {',
       '  searchUsers(search: $search) {',
@@ -109,9 +110,7 @@ window.StuntListingGQL = (function () {
       '}'
     ].join('\n'),
 
-    /* TODO a guess: resolving a request token back to one performer.
-       The visibility flags come along because this record is used to build a
-       sheet for somebody else — see toPersonRespectingPrivacy in api.js. */
+    /* TODO a guess: resolving a request token back to one performer. */
     performer: [
       'query userDetails($user_id: Int!) {',
       '  userDetails(user_id: $user_id) {',
@@ -125,8 +124,6 @@ window.StuntListingGQL = (function () {
       '    phone_number',
       '    phone_number_formatted',
       '    email',
-      '    email_visibility',
-      '    phone_number_visibility',
       '    hair_color',
       '    __typename',
       '  }',
