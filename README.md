@@ -62,9 +62,10 @@ camera flow and request links never wait for it.
 
 ## Not built yet
 
-The client side is complete, including request links. What still needs the StuntListing backend:
-the three endpoints below, signing the request tokens, and sending the text from StuntListing
-rather than the coordinator's own SMS app.
+The client side is complete, including request links. What still needs StuntListing: the real
+GraphQL queries (only two of the four are confirmed — see below), CORS for a browser origin,
+signing the request tokens, and sending the text from StuntListing rather than the coordinator's
+own SMS app.
 
 ![Example of a finished sheet](docs/screenshot-result.jpg)
 
@@ -88,8 +89,8 @@ the performer search uses a built-in fictional roster.
 - `/index.html` — the performer view (the default page)
 - `/coordinator.html` — the coordinator view
 
-In demo mode the coordinator page simply *is* the coordinator view, so it can be tried without a
-login. Against a live session it checks `coordinator` and locks the search otherwise.
+There is no sign-in, so both pages open straight up. `?api=live` points the app at the real
+StuntListing API and sticks; `?api=demo` goes back to the sample roster.
 
 ## Deploying to Cloudflare
 
@@ -117,30 +118,35 @@ Create → import the GitHub repository — Cloudflare then builds and deploys o
 
 ## Wiring it into StuntListing
 
-Everything the app needs from the server goes through three calls in
-`public/js/api.js`; the rest is UI. To connect the real site:
+StuntListing's API is **GraphQL**, at `https://api.stuntlisting.com/graphql`, authenticated with
+a Bearer token, on a different origin to this app. Every document sent to it lives in one
+`QUERIES` block in `public/js/graphql.js` — that is the only file to edit.
 
-1. In `public/js/config.js` set `mode: 'stuntlisting'`.
-2. Serve the app from a StuntListing origin (e.g. `stuntlisting.com/hair-selfie/`) so the
-   session cookie rides along.
-3. Implement three endpoints:
+Switch backends with `?api=live` (sticks) or by setting `mode: 'stuntlisting'` in
+`public/js/config.js`.
 
-**`GET /api/hair-selfie/session`** — who is signed in, and are they a coordinator?
+### What is known, and what is guessed
 
-```json
-{
-  "user": { "id": "123", "name": "Jamie Northrup", "height": "6'0\"",
-            "weight": "185 lb", "phone": "(555) 555-0100", "email": "jamie@example.com" },
-  "coordinator": false
-}
-```
+From the mobile app's auth provider, two documents are confirmed:
 
-**`GET /api/hair-selfie/performers?q=al`** — autocomplete for coordinators. Returns an array of
-the same person shape. **Must return `403` unless the caller really is a coordinator** — the UI
-only makes the box inert, which is cosmetic, and this endpoint hands out contact details.
+- the `login` mutation, returning `access_token` / `refresh_token`
+- the `getMyProfile` query
 
-**`GET /api/hair-selfie/performers/{token}`** — resolves a request link back to one performer,
-same person shape.
+Everything else in `QUERIES` is **marked TODO and is a guess** shaped like those two. Check each
+against the real schema before trusting it:
+
+- the profile's selection set — `height`, `weight`, `phone` may be named differently or nested
+- how a coordinator is flagged — `isCoordinator` is invented
+- `searchPerformers` — there is no evidence such a query exists at all
+- resolving a request token back to a performer
+
+Two things will bite on the first live attempt:
+
+1. **CORS.** The API has never served a browser origin — the mobile app is native. It must allow
+   whichever origin this app is served from, or every request fails with what looks like an
+   offline error.
+2. **Contact details.** Whatever answers the performer lookup hands out phone and email, so it
+   needs authorization and rate limiting.
 
 ### Both entry points
 
@@ -150,37 +156,45 @@ Two pages, so StuntListing can link each from the right place in its own menu.
   coordinator UI at all.
 - **Coordinator tool** → `/coordinator.html`. Opens on the performer search. Picking someone
   produces the request link plus Text / Copy / Share, and a **Build it myself** link that opens
-  the performer page prefilled for them. If `session.coordinator` is false the search is inert
-  and says why.
+  the performer page prefilled for them.
+
+### Who is sending
+
+**There is no sign-in.** Who sends a request is just an id: `?c=<id>`, which StuntListing passes
+when it links to the coordinator page. It sticks in the browser once set, defaults to `33`, and
+the name beside it is set on the page. That id rides along on every request link as `&from=<id>`,
+and the prefilled text names the sender, so whatever picks the request up knows who asked.
+
+A token can still be handed over — `?token=…`, stripped from the URL immediately, or a
+`postMessage` from an allow-listed WebView host — and `StuntListingGQL.login()` still exists if a
+real sign-in is ever wanted. Nothing in the UI asks for one.
 
 ### Request links (the textable one)
 
 A coordinator picks a performer and gets a link:
 
 ```
-https://…/hair-selfie/?p=<token>
+https://…/hair-selfie/index.html?p=<token>&from=<coordinatorId>
 ```
 
 Opened on a phone, that link names the performer, fills in their details and drops them straight
-on **Take photos**. The coordinator panel is hidden.
+on **Take photos**.
 
-The app treats `p` as **opaque** — it passes the value to the endpoint above and never parses it.
-That matters, because:
+The app treats `p` as **opaque** — it passes the value straight to the lookup and never parses
+it. That matters, because:
 
 > **Mint `p` as a signed, expiring token, not a raw performer id.** A raw id is guessable, and
-> `/performers/{id}` returns phone and email — anyone could walk the range and scrape the roster.
-> Sign it (performer id + expiry), reject anything unsigned or stale, and rate-limit the
-> endpoint. The demo uses bare ids like `demo-4` only because it has no server to sign with;
-> nothing in the client needs to change when you switch to real tokens.
+> the lookup returns phone and email — anyone could walk the range and scrape the roster. Sign it
+> (performer id + expiry), reject anything unsigned or stale, and rate-limit it. The demo uses
+> bare ids like `demo-4` only because it has no server to sign with; nothing in the client needs
+> to change when you switch to real tokens.
 
 Only the token travels in the link, so no phone number or email ends up sitting in a text
 message thread.
 
 To have StuntListing send the text itself rather than opening the coordinator's SMS app, build
 the same URL server-side and put it in your outbound message; the client's **Text** button is
-just a `sms:` link for when you want to send it by hand.
-
-Endpoint paths are configurable in `public/js/config.js` if you'd rather mount them elsewhere.
+just a `sms:` link for sending by hand.
 
 ## Customizing
 
@@ -198,9 +212,11 @@ Everything below lives in `public/js/config.js` / CSS variables:
 | --- | --- |
 | `public/index.html` | Performer page: photo grid, details, create, adjust dialog |
 | `public/coordinator.html` | Coordinator page: performer search and request links |
-| `public/css/styles.css` | All styling (dark theme) |
-| `public/js/config.js` | Mode, endpoint paths, output size/format |
-| `public/js/api.js` | Session + performer search adapter (demo and live implementations) |
+| `public/css/styles.css` | Shared styling (dark theme) |
+| `public/css/coordinator.css` | Styles used only by the coordinator page |
+| `public/js/config.js` | Mode, API URL, coordinator id, output size/format |
+| `public/js/graphql.js` | StuntListing transport: every GraphQL document lives here |
+| `public/js/api.js` | Session + performer adapter (demo and live implementations) |
 | `public/js/outlines.js` | The dashed passport-style head guides (front + profile SVG paths) |
 | `public/js/composer.js` | Canvas rendering: shared photo-framing math and final-sheet composition |
 | `public/js/app.js` | Performer page wiring: uploads, drag/swap, adjust, create/save |
