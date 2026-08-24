@@ -179,10 +179,16 @@ window.HairSelfieApi = (function () {
    * the UI works in. Confirmed against the app's own getMyProfile and
    * listDetails queries, and the user table:
    *   - there is no single `name`; it is first_name + last_name, with alias
-   *     and nickname alongside
+   *     and nickname alongside as fallbacks
    *   - phone comes both raw and formatted — the formatted one is for people
    *   - inside a list a user carries both `id` (the membership row) and
    *     `user_id` (the actual user), so user_id wins where present
+   *
+   * The user table also carries email_visibility / phone_number_visibility.
+   * They are deliberately ignored: a hair selfie sheet is a production
+   * document and is meant to carry the performer's contact details, so those
+   * flags do not apply here. Same for isAdminApproved. Decided, not
+   * overlooked — don't reinstate without asking.
    */
   function toPerson(u) {
     if (!u) return {};
@@ -201,37 +207,6 @@ window.HairSelfieApi = (function () {
   }
 
   /*
-   * Performers can hide their contact details — the user table carries
-   * email_visibility and phone_number_visibility — and this app prints those
-   * details onto an image that gets passed around a set. That is exactly what
-   * someone hiding them is opting out of, so a hidden field is left off a
-   * sheet built for somebody else.
-   *
-   * TODO the flag's values have not been seen. Only clearly-private values
-   * hide the field; anything unrecognised shows, because wrongly blanking a
-   * phone everyone expects is its own kind of broken, and whoever is building
-   * the sheet can always delete it by hand. Narrow this once the values are
-   * known.
-   */
-  function isHidden(flag) {
-    if (flag === false || flag === 0) return true;
-    var v = String(flag == null ? '' : flag).trim().toLowerCase();
-    return v === 'private' || v === 'hidden' || v === 'none' ||
-           v === 'no' || v === 'false' || v === '0';
-  }
-
-  /* Same mapping, but honouring the subject's visibility choices. Used when
-     looking up somebody else — never for your own profile. */
-  function toPersonRespectingPrivacy(u) {
-    var p = toPerson(u);
-    if (!u) return p;
-    p.hiddenFields = [];
-    if (isHidden(u.phone_number_visibility)) { p.phone = ''; p.hiddenFields.push('phone'); }
-    if (isHidden(u.email_visibility)) { p.email = ''; p.hiddenFields.push('email'); }
-    return p;
-  }
-
-  /*
    * TODO confirm what `role` actually contains. The profile has a role field
    * rather than the boolean this app first assumed, but its values have not
    * been seen — so match loosely and keep the list configurable rather than
@@ -247,7 +222,7 @@ window.HairSelfieApi = (function () {
     });
   }
 
-  /* ── real StuntListing implementation ────────────────────────── */
+  /* ── real StuntListing implementation ─────────────────────── */
 
   var live = {
     isDemo: false,
@@ -298,7 +273,7 @@ window.HairSelfieApi = (function () {
         .then(function (data) {
           var u = data && (data.userDetails || data.getUser || data.user);
           if (!u) throw new Error('performer not found');
-          return toPersonRespectingPrivacy(u);
+          return toPerson(u);
         });
     },
 
@@ -317,8 +292,6 @@ window.HairSelfieApi = (function () {
   impl.mode = MODE;
   /* pure helpers, exposed for tests */
   impl.toPerson = toPerson;
-  impl.toPersonRespectingPrivacy = toPersonRespectingPrivacy;
-  impl.isHidden = isHidden;
   impl.roleIsCoordinator = roleIsCoordinator;
   return impl;
 })();
