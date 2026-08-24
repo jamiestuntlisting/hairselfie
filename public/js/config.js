@@ -18,21 +18,30 @@ window.HAIRSELFIE_CONFIG = {
   graphqlUrl: 'https://api.stuntlisting.com/graphql',
 
   auth: {
-    /* Where the access token is kept in the browser. The mobile app uses
-       these same names in SecureStore. */
+    /* Where an access token is kept, if one is ever handed over. The mobile
+       app uses these same names in SecureStore. There is no sign-in screen:
+       a token can arrive as ?token=… (stripped from the URL immediately) or
+       by postMessage from an allow-listed WebView host, both handled in
+       js/graphql.js. StuntListingGQL.login() still exists if a sign-in is
+       ever wanted again. */
     tokenKey: 'STL_token',
     refreshKey: 'STL_refresh',
-
-    /* A token can be handed to this page as ?token=… (stripped from the URL
-       immediately) or by postMessage from a WebView host. List the origins
-       allowed to post one; an empty list accepts any, which is only safe if
-       the page is never embedded by anyone else. */
     tokenParam: 'token',
-    tokenOrigins: ['https://stuntlisting.com', 'https://www.stuntlisting.com'],
+    tokenOrigins: ['https://stuntlisting.com', 'https://www.stuntlisting.com']
+  },
 
-    /* Show an email/password sign-in when there is no token yet. Turn this
-       off if the page is only ever opened with a token handed in. */
-    allowPasswordLogin: true
+  /*
+   * Who is sending the request.
+   *
+   * Eventually StuntListing hands the coordinator's id to this page —
+   * ?c=<id> — and that is who the request comes from. Until then the id
+   * defaults to the one below and the name is whatever you set on the
+   * coordinator page; both are kept in this browser.
+   */
+  coordinator: {
+    defaultId: '33',
+    defaultName: 'Coordinator',
+    idParam: 'c'
   },
 
   /*
