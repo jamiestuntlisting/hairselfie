@@ -35,7 +35,6 @@
              aria-controls="perf-listbox" aria-label="Search performers" autocomplete="off">
       <div class="ac-list" id="perf-listbox" role="listbox" hidden></div>
     </div>
-    <p id="coord-note" class="locked-note" hidden>This tool is locked — coordinators only.</p>
     <p class="hint hint-small">Pick a performer and send them a link — it opens straight into
       taking their four photos, details already filled in.</p>
 
@@ -44,10 +43,24 @@
 
   <section class="panel">
     <div class="panel-head panel-head-plain">
-      <h2>Your own sheet</h2>
+      <h2>You</h2>
     </div>
-    <p class="hint">Making a hair selfie of your own works the same way it does for performers.</p>
-    <a class="btn" href="index.html">Open the performer page</a>
+    <p class="hint">Requests go out under this name and id. StuntListing will pass the real
+      coordinator id in as <code>?c=</code> later; until then it is set here.</p>
+    <div class="who-row">
+      <div class="field">
+        <label for="c-name">Your name</label>
+        <input id="c-name" type="text" placeholder="Coordinator name" autocomplete="name">
+      </div>
+      <div class="field field-narrow">
+        <label for="c-id">Coordinator id</label>
+        <input id="c-id" type="text" inputmode="numeric" placeholder="33">
+      </div>
+    </div>
+    <p class="send-status" id="who-status" aria-live="polite"></p>
+    <p class="hint hint-small">
+      Making a hair selfie of your own? <a href="index.html">Open the performer page</a>.
+    </p>
   </section>
 </main>
 
@@ -56,7 +69,6 @@
 <script src="js/config.js"></script>
 <script src="js/graphql.js"></script>
 <script src="js/api.js"></script>
-<script src="js/signin.js"></script>
 <script src="js/coordinator.js"></script>
 </body>
 </html>
