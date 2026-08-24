@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Hair Selfie · API check</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div>
+      <h1>API check</h1>
+      <p class="tagline">what StuntListing's GraphQL actually calls things</p>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <p class="hint">
+      Four of the queries this app sends are guesses. This asks the API directly — first by
+      introspection, and if that is switched off, by probing names and reading the errors back,
+      which works either way. Nothing is written; every request is a read.
+    </p>
+    <div class="photo-actions">
+      <button id="run" class="btn btn-primary" type="button">Run the check</button>
+      <button id="copy" class="btn" type="button" hidden>Copy result</button>
+    </div>
+    <p class="hint hint-small" id="status"></p>
+    <pre class="schema-out" id="out" hidden></pre>
+  </section>
+</main>
+
+<script src="js/config.js"></script>
+<script src="js/graphql.js"></script>
+<script src="js/schema-check.js"></script>
+<script>
+(function () {
+  'use strict';
+  var out = document.getElementById('out');
+  var status = document.getElementById('status');
+  var copyBtn = document.getElementById('copy');
+  var lines = [];
+
+  function say(s) {
+    lines.push(s);
+    out.hidden = false;
+    out.textContent = lines.join('\n');
+  }
+
+  document.getElementById('run').addEventListener('click', function () {
+    lines = [];
+    out.textContent = '';
+    copyBtn.hidden = true;
+    status.textContent = 'Asking the API…';
+
+    var GQL = window.StuntListingGQL;
+    say('endpoint: ' + GQL.endpoint);
+    say('token present: ' + (GQL.isSignedIn() ? 'yes' : 'no'));
+    say('');
+
+    say('— introspection —');
+    GQL.introspect().then(function (fields) {
+      if (fields.length) {
+        say(fields.length + ' query fields:');
+        fields.forEach(function (f) { say('  ' + f); });
+      } else {
+        say('unavailable (commonly disabled in production) — probing instead');
+      }
+      say('');
+      say('— probing likely search names —');
+      return window.SchemaCheck.probe();
+    }).then(function (results) {
+      results.forEach(function (r) {
+        var mark = r.exists === true ? 'YES ' : (r.exists === false ? ' no ' : '  ? ');
+        say(mark + r.name + '  —  ' + r.note);
+      });
+      say('');
+      say('— what getMyProfile returns —');
+      return window.SchemaCheck.fieldsOf('getMyProfile');
+    }).then(function (info) {
+      say('type: ' + (info.type || 'unknown'));
+      if (info.suggestions) say('fields it suggested: ' + info.suggestions);
+      say('raw: ' + info.note);
+      status.textContent = 'Done. Copy the result and send it over.';
+      copyBtn.hidden = false;
+    }).catch(function (err) {
+      say('');
+      say('stopped: ' + err.message);
+      status.textContent = 'Stopped early — the text below still helps.';
+      copyBtn.hidden = false;
+    });
+  });
+
+  copyBtn.addEventListener('click', function () {
+    var text = lines.join('\n');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () { status.textContent = 'Copied.'; },
+        function () { status.textContent = 'Copy failed — select the text above.'; }
+      );
+    } else {
+      status.textContent = 'Select the text above to copy it.';
+    }
+  });
+})();
+</script>
+
+<style>
+.schema-out {
+  margin-top: 14px;
+  padding: 13px;
+  background: #0a0c11;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+}
+</style>
+</body>
+</html>
