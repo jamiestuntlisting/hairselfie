@@ -1,13 +1,21 @@
 /*
- * Cloudflare Workers config — static-assets-only Worker (no server code).
+ * Cloudflare Workers config.
+ *
+ * The site is static assets in ./public. The Worker exists only to proxy
+ * StuntListing's GraphQL API same-origin, because that API sends no CORS
+ * headers — see src/worker.js. Static files are served without the Worker
+ * running at all.
+ *
  * Deploy with:  npx wrangler deploy
  * Local dev:    npx wrangler dev
  */
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "hairselfie",
+  "main": "src/worker.js",
   "compatibility_date": "2026-08-09",
   "assets": {
-    "directory": "./public"
+    "directory": "./public",
+    "binding": "ASSETS"
   }
 }
