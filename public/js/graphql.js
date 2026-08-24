@@ -11,11 +11,12 @@
  *   - profile query     `getMyProfile`
  *   - token storage     STL_token / STL_refresh
  *
- * What is NOT confirmed and is marked TODO below: the field names on the
- * profile, whether a coordinator flag exists, and whether a performer search
- * query exists at all. Those are guesses shaped to look like the two
- * documents we have seen; check them before trusting them — introspect()
- * at the bottom of this file will tell you.
+ * The schema is snake_case, and requests carry an operationName alongside
+ * the query — both follow the app's own GraphQL files.
+ *
+ * Still NOT confirmed: how to search the user table by name. That query is
+ * marked TODO below and remains a guess. introspect() and js/schema-check.js
+ * will identify it against a live API.
  */
 window.StuntListingGQL = (function () {
   'use strict';
@@ -39,57 +40,91 @@ window.StuntListingGQL = (function () {
       '}'
     ].join('\n'),
 
-    /* TODO confirm the selection set. The mobile app calls getMyProfile but
-       we have not seen which fields it asks for — height/weight/phone are the
-       ones this app needs, and they may be named differently or live on a
-       nested profile object. */
+    /* Confirmed against the app's own getMyProfile query. That query asks for
+       ~50 fields; this asks only for what a hair selfie sheet needs.
+       Note there is no single `name` — it is first_name + last_name, with
+       alias alongside — and the phone comes formatted as well as raw. */
     me: [
-      'query GetMyProfile {',
+      'query getMyProfile {',
       '  getMyProfile {',
       '    id',
-      '    name',
+      '    first_name',
+      '    last_name',
+      '    alias',
       '    height',
       '    weight',
-      '    phone',
+      '    phone_number',
+      '    phone_number_formatted',
       '    email',
-      '    isCoordinator',
+      '    hair_color',
+      '    role',
+      '    __typename',
       '  }',
       '}'
     ].join('\n'),
 
-    /* TODO this query is a guess — we have no evidence of a performer search
-       in the schema yet. Coordinator search stays disabled until it resolves. */
+    /* TODO still a guess — the one document we have not seen. The field
+       selection below uses the real user shape (from listDetails), so only
+       the query name and its argument should need correcting. */
     searchPerformers: [
-      'query SearchPerformers($q: String!) {',
-      '  searchPerformers(query: $q, limit: 8) {',
+      'query searchUsers($search: String!) {',
+      '  searchUsers(search: $search) {',
       '    id',
-      '    name',
-      '    height',
-      '    weight',
-      '    phone',
+      '    user_id',
+      '    first_name',
+      '    last_name',
+      '    alias',
+      '    phone_number',
       '    email',
+      '    __typename',
       '  }',
       '}'
     ].join('\n'),
 
-    /* TODO likewise a guess: resolving a request token back to one performer. */
-    performer: [
-      'query Performer($token: String!) {',
-      '  hairSelfieRequest(token: $token) {',
-      '    performer {',
+    /* Users as they appear inside a list (confirmed from listDetails). A
+       coordinator working from their own lists may be a better fit than a
+       global search — the shape is here either way. */
+    listDetails: [
+      'query listDetails($list_id: Int!) {',
+      '  listDetails(list_id: $list_id) {',
+      '    list_id',
+      '    list_name',
+      '    users {',
       '      id',
-      '      name',
-      '      height',
-      '      weight',
-      '      phone',
+      '      user_id',
+      '      first_name',
+      '      last_name',
+      '      alias',
+      '      phone_number',
       '      email',
+      '      __typename',
       '    }',
+      '    __typename',
+      '  }',
+      '}'
+    ].join('\n'),
+
+    /* TODO a guess: resolving a request token back to one performer. */
+    performer: [
+      'query userDetails($user_id: Int!) {',
+      '  userDetails(user_id: $user_id) {',
+      '    id',
+      '    first_name',
+      '    last_name',
+      '    alias',
+      '    height',
+      '    weight',
+      '    phone_number',
+      '    phone_number_formatted',
+      '    email',
+      '    hair_color',
+      '    __typename',
       '  }',
       '}'
     ].join('\n')
   };
 
-  /* ── token handling ──────────────────────────────────────────── */
+  /* ── token handling ─────────────────────────────────────── */
 
   function store(key, value) {
     try {
@@ -143,7 +178,7 @@ window.StuntListingGQL = (function () {
     store(REFRESH_KEY, null);
   }
 
-  /* ── requests ────────────────────────────────────────────────── */
+  /* ── requests ───────────────────────────────────────────── */
 
   function request(query, variables, opts) {
     opts = opts || {};
@@ -151,10 +186,18 @@ window.StuntListingGQL = (function () {
     var t = accessToken();
     if (t && !opts.anonymous) headers.Authorization = 'Bearer ' + t;
 
+    /* The app sends operationName with every request; mirror that so server
+       logs and any per-operation handling line up. */
+    var named = (query.match(/^\s*(?:query|mutation)\s+([A-Za-z_][A-Za-z0-9_]*)/) || [])[1];
+
     return fetch(URL_ENDPOINT, {
       method: 'POST',
       headers: headers,
-      body: JSON.stringify({ query: query, variables: variables || {} })
+      body: JSON.stringify({
+        operationName: named || undefined,
+        variables: variables || {},
+        query: query
+      })
     }).then(function (res) {
       return res.json().catch(function () {
         throw new Error('StuntListing returned a non-JSON response (' + res.status + ')');
@@ -185,14 +228,15 @@ window.StuntListingGQL = (function () {
   /*
    * Ask the API what it actually offers.
    *
-   * Four of the documents above are guesses, because the schema has never
+   * The search query above is still a guess, because the schema has never
    * been seen from here. Run this in the browser console against the real
    * API and it answers the question directly:
    *
    *   await StuntListingGQL.introspect('search')
    *
    * With no filter it lists every query field. Returns [] and explains
-   * itself if introspection is switched off in production, which is common.
+   * itself if introspection is switched off in production, which is common;
+   * js/schema-check.js then probes instead.
    */
   function introspect(filter) {
     var doc = [
