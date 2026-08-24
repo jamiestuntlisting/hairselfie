@@ -12,7 +12,9 @@
   var cfg = window.HAIRSELFIE_CONFIG || {};
   var REQ_PARAM = cfg.requestParam || 'p';
 
-  var isCoordinator = false;
+  var coordCfg = cfg.coordinator || {};
+  var LS_ID = 'hairselfie.coord.id';
+  var LS_NAME = 'hairselfie.coord.name';
 
   function $(sel) { return document.querySelector(sel); }
 
@@ -33,23 +35,85 @@
 
   function firstName(p) { return String(p.name || '').split(' ')[0] || 'them'; }
 
+  function store(key, value) {
+    try { localStorage.setItem(key, value); } catch (e) { /* private mode */ }
+  }
+
+  function read(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
+  }
+
+  /*
+   * Who is sending. StuntListing will hand the real coordinator id to this
+   * page as ?c=<id>; that wins and sticks. Otherwise it is whatever was set
+   * here last, falling back to the configured default.
+   */
+  var me = (function () {
+    var id = null;
+    try {
+      id = new URLSearchParams(window.location.search).get(coordCfg.idParam || 'c');
+    } catch (e) { /* ignore */ }
+    if (id) store(LS_ID, id);
+    return {
+      id: id || read(LS_ID) || coordCfg.defaultId || '33',
+      name: read(LS_NAME) || coordCfg.defaultName || 'Coordinator'
+    };
+  })();
+
+  function renderMe() {
+    var chip = $('#session-chip');
+    if (chip) {
+      chip.innerHTML = 'Sending as <b>' + esc(me.name) + '</b> · #' + esc(me.id);
+    }
+    var nameEl = $('#c-name');
+    var idEl = $('#c-id');
+    if (nameEl && nameEl.value !== me.name) nameEl.value = me.name;
+    if (idEl && idEl.value !== me.id) idEl.value = me.id;
+  }
+
+  function wireMe() {
+    var nameEl = $('#c-name');
+    var idEl = $('#c-id');
+    if (!nameEl || !idEl) return;
+
+    var save = debounce(function () {
+      me.name = nameEl.value.trim() || (coordCfg.defaultName || 'Coordinator');
+      me.id = idEl.value.trim() || (coordCfg.defaultId || '33');
+      store(LS_NAME, me.name);
+      store(LS_ID, me.id);
+      renderMe();
+      $('#who-status').textContent = 'Saved.';
+      /* a link already on screen was built with the old id */
+      if (!$('#send-box').hidden && lastPicked) renderSendBox(lastPicked);
+    }, 400);
+
+    nameEl.addEventListener('input', save);
+    idEl.addEventListener('input', save);
+  }
+
+  var lastPicked = null;
+
   /* Only an opaque token travels in the link — details are fetched — so no
      phone number or email ends up sitting in a text thread. */
   function requestLinkFor(performer) {
     var url = new URL('index.html', window.location.href);
     url.searchParams.set(REQ_PARAM, performer.id);
+    /* who it came from — StuntListing will want this to attribute the request */
+    if (me.id) url.searchParams.set('from', me.id);
     return url.toString();
   }
 
   function smsHref(performer, link) {
-    var body = 'Hi ' + firstName(performer) + ' — please send four hair photos (front, both ' +
-               'sides, back) for the shoot. Takes a minute on your phone: ' + link;
+    var body = 'Hi ' + firstName(performer) + ' — ' + me.name + ' here. Please send four hair ' +
+               'photos (front, both sides, back) for the shoot. Takes a minute on your ' +
+               'phone: ' + link;
     var num = String(performer.phone || '').replace(/[^0-9+]/g, '');
     /* "?&body=" is the spelling that works on both iOS and Android */
     return 'sms:' + num + '?&body=' + encodeURIComponent(body);
   }
 
   function renderSendBox(p) {
+    lastPicked = p;
     var box = $('#send-box');
     var link = requestLinkFor(p);
     var who = esc(firstName(p));
@@ -94,7 +158,7 @@
     }
   }
 
-  /* ── autocomplete ────────────────────────────────────────────── */
+  /* ── autocomplete ─────────────────────────────────────── */
 
   function wireSearch() {
     var input = $('#perf-search');
@@ -152,7 +216,6 @@
     }
 
     var run = debounce(function () {
-      if (!isCoordinator) return;
       var q = input.value.trim();
       var mine = ++seq;
       if (!q) { close(); return; }
@@ -165,16 +228,6 @@
         list.hidden = false;
       });
     }, 170);
-
-    /* a locked box explains itself rather than silently doing nothing */
-    function poke(e) {
-      if (isCoordinator) return;
-      if (e) e.preventDefault();
-      $('#coord-note').hidden = false;
-      input.blur();
-    }
-    input.addEventListener('pointerdown', poke);
-    input.addEventListener('focus', function () { poke(null); });
 
     input.addEventListener('input', run);
     input.addEventListener('keydown', function (e) {
@@ -189,43 +242,28 @@
 
   function init() {
     wireSearch();
+    wireMe();
+    renderMe();
+
     var input = $('#perf-search');
+    $('#coord-badge').hidden = false;
 
-    Api.getSession().then(function (session) {
-      var user = session.user || {};
-      /* Demo mode has no real roles, so the coordinator page simply is the
-         coordinator view; a live session decides for itself. */
-      isCoordinator = Api.isDemo ? true : !!session.coordinator;
+    /* Say plainly where these names come from, right where they appear —
+       these are invented until the app is pointed at the real directory. */
+    if (Api.mode !== 'stuntlisting') {
+      var note = document.createElement('p');
+      note.className = 'sample-note';
+      note.innerHTML = 'Showing <b>sample performers</b>, not StuntListing. ' +
+        '<a href="?api=live">Connect to StuntListing</a>';
+      input.closest('.panel').appendChild(note);
+    }
 
-      $('#session-chip').innerHTML = user.name
-        ? 'Signed in as <b>' + esc(user.name) + '</b>'
-        : '';
-      $('#coord-badge').hidden = !isCoordinator;
-
-      /* Say plainly where these names come from, right where they appear —
-         these are invented until the app is pointed at the real directory. */
-      if (Api.mode !== 'stuntlisting') {
-        var note = document.createElement('p');
-        note.className = 'sample-note';
-        note.innerHTML = 'Showing <b>sample performers</b>, not StuntListing. ' +
-          '<a href="?api=live">Connect to StuntListing</a>';
-        $('#perf-search').closest('.panel').appendChild(note);
-      }
-      input.readOnly = !isCoordinator;
-      input.classList.toggle('is-locked', !isCoordinator);
-
-      /* a search-first page should be ready to type on, but not hijack a
-         phone keyboard the moment it opens */
-      if (isCoordinator && window.matchMedia &&
-          window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
-        input.focus();
-      }
-    }).catch(function (err) {
-      console.warn('session unavailable:', err.message);
-      isCoordinator = false;
-      input.readOnly = true;
-      $('#session-chip').textContent = 'Not signed in';
-    });
+    /* a search-first page should be ready to type on, but not hijack a
+       phone keyboard the moment it opens */
+    if (window.matchMedia &&
+        window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+      input.focus();
+    }
   }
 
   window.HairSelfieCoordinator = { requestLinkFor: requestLinkFor, smsHref: smsHref };
