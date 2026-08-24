@@ -4,18 +4,23 @@
  * mode: 'demo'         — runs standalone with a local profile and a sample
  *                        performer roster. Good for trying the app before
  *                        it is wired into StuntListing.
- * mode: 'stuntlisting' — talks to the real StuntListing backend using the
- *                        endpoints below. The page must be served from (or
- *                        proxied through) a StuntListing origin so the
- *                        session cookie is sent along. See README.md for
- *                        the exact request/response contracts.
+ * mode: 'stuntlisting' — talks to the real StuntListing backend. Switch with
+ *                        ?api=live (sticks) or by setting it here.
  */
 window.HAIRSELFIE_CONFIG = {
   mode: 'demo',
 
-  /* StuntListing's GraphQL API. Every document sent to it lives in
-     js/graphql.js — correct them there against the real schema. */
-  graphqlUrl: 'https://api.stuntlisting.com/graphql',
+  /*
+   * Where GraphQL requests go. This is the Worker's own same-origin proxy
+   * (src/worker.js), which forwards to https://api.stuntlisting.com/graphql
+   * server-side — that API sends no CORS headers, so a browser cannot call
+   * it directly. Point this straight at the API once it allows this origin,
+   * or once the app is served from a StuntListing origin.
+   *
+   * Every document sent to it lives in js/graphql.js — correct them there
+   * against the real schema.
+   */
+  graphqlUrl: '/api/graphql',
 
   auth: {
     /* Where an access token is kept, if one is ever handed over. The mobile
