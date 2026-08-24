@@ -43,7 +43,8 @@ window.StuntListingGQL = (function () {
     /* Confirmed against the app's own getMyProfile query. That query asks for
        ~50 fields; this asks only for what a hair selfie sheet needs.
        Note there is no single `name` — it is first_name + last_name, with
-       alias alongside — and the phone comes formatted as well as raw. */
+       alias and nickname alongside — and the phone comes formatted as well
+       as raw. */
     me: [
       'query getMyProfile {',
       '  getMyProfile {',
@@ -51,6 +52,7 @@ window.StuntListingGQL = (function () {
       '    first_name',
       '    last_name',
       '    alias',
+      '    nickname',
       '    height',
       '    weight',
       '    phone_number',
@@ -63,9 +65,10 @@ window.StuntListingGQL = (function () {
       '}'
     ].join('\n'),
 
-    /* TODO still a guess — the one document we have not seen. The field
-       selection below uses the real user shape (from listDetails), so only
-       the query name and its argument should need correcting. */
+    /* TODO still a guess — the one document we have not seen. The user table
+       has a fullTextSearch column, so search is implemented server-side and a
+       resolver for it exists; only its name and argument should need
+       correcting here. The field selection is the real user shape. */
     searchPerformers: [
       'query searchUsers($search: String!) {',
       '  searchUsers(search: $search) {',
@@ -74,6 +77,7 @@ window.StuntListingGQL = (function () {
       '    first_name',
       '    last_name',
       '    alias',
+      '    nickname',
       '    phone_number',
       '    email',
       '    __typename',
@@ -81,9 +85,9 @@ window.StuntListingGQL = (function () {
       '}'
     ].join('\n'),
 
-    /* Users as they appear inside a list (confirmed from listDetails). A
-       coordinator working from their own lists may be a better fit than a
-       global search — the shape is here either way. */
+    /* Users as they appear inside a list (confirmed from listDetails). A list
+       belongs to a userId, so these are the coordinator's own lists — picking
+       from one may fit better than a global search. */
     listDetails: [
       'query listDetails($list_id: Int!) {',
       '  listDetails(list_id: $list_id) {',
@@ -95,6 +99,7 @@ window.StuntListingGQL = (function () {
       '      first_name',
       '      last_name',
       '      alias',
+      '      nickname',
       '      phone_number',
       '      email',
       '      __typename',
@@ -104,7 +109,9 @@ window.StuntListingGQL = (function () {
       '}'
     ].join('\n'),
 
-    /* TODO a guess: resolving a request token back to one performer. */
+    /* TODO a guess: resolving a request token back to one performer.
+       The visibility flags come along because this record is used to build a
+       sheet for somebody else — see toPersonRespectingPrivacy in api.js. */
     performer: [
       'query userDetails($user_id: Int!) {',
       '  userDetails(user_id: $user_id) {',
@@ -112,11 +119,14 @@ window.StuntListingGQL = (function () {
       '    first_name',
       '    last_name',
       '    alias',
+      '    nickname',
       '    height',
       '    weight',
       '    phone_number',
       '    phone_number_formatted',
       '    email',
+      '    email_visibility',
+      '    phone_number_visibility',
       '    hair_color',
       '    __typename',
       '  }',
