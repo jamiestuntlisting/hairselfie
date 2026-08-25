@@ -234,8 +234,14 @@ window.Composer = (function () {
       : 0;
 
     /* contact details — one line if they fit, otherwise two */
+    /* Phone and weight print in one consistent shape no matter how they
+       were typed or what the user table happened to hold. */
+    var fmt = window.HairSelfieFormat || {};
     var fields = ['height', 'weight', 'phone', 'email'].map(function (k) {
-      return ((person && person[k]) || '').trim();
+      var v = ((person && person[k]) || '').trim();
+      if (k === 'weight' && fmt.weight) return fmt.weight(v);
+      if (k === 'phone' && fmt.phone) return fmt.phone(v);
+      return v;
     }).filter(Boolean);
 
     var SEP = '   ·   ';
@@ -271,7 +277,7 @@ window.Composer = (function () {
     var chips = [];
     if (person && person.canCut) chips.push('ABLE TO CUT HAIR');
     if (person && person.canShave) chips.push('ABLE TO SHAVE');
-    var chipSize = Math.round(CW * 0.036);
+    var chipSize = Math.round(CW * 0.048);
     var chipPadX = Math.round(chipSize * 0.85);
     var chipH = Math.round(chipSize * 2.3);
     var chipGap = Math.round(CW * 0.022);

@@ -24,6 +24,12 @@
   var FIELDS = ['name', 'height', 'weight', 'phone', 'email'];
   var NOTE_MAX = 140;
 
+  /* a touch device opens the camera on tap; a desktop browser ignores the
+     capture attribute and opens the file dialog, so say what will happen */
+  var EMPTY_CTA = window.matchMedia && window.matchMedia('(pointer: coarse)').matches
+    ? 'Tap to take photo'
+    : 'Click to add';
+
   var state = {
     slots: { front: null, left: null, right: null, back: null },
     me: {},
@@ -93,7 +99,10 @@
     input.type = 'file';
     input.accept = 'image/*';
     if (opts.multiple) input.multiple = true;
-    if (opts.capture) input.setAttribute('capture', 'environment');
+    /* 'user' is the selfie camera. Everything here is a photo of yourself,
+       so it is always the right one to open; desktop browsers ignore the
+       attribute and show the file dialog as before. */
+    if (opts.capture) input.setAttribute('capture', 'user');
     input.style.cssText = 'position:fixed;left:-10000px;top:0;opacity:0';
     document.body.appendChild(input);
 
@@ -133,7 +142,7 @@
           Outlines.svgMarkup(def.outline, def.mirror) +
           '<span class="cell-name">' + esc(def.label) + '</span>' +
           (def.facing ? '<span class="cell-facing">' + esc(def.facing) + '</span>' : '') +
-          '<span class="cell-cta">Tap to add</span>' +
+          '<span class="cell-cta">' + esc(EMPTY_CTA) + '</span>' +
         '</div>' +
         '<div class="cell-guide">' + Outlines.svgMarkup(def.outline, def.mirror) + '</div>' +
         '<span class="cell-tag">' + esc(def.label) + '</span>' +
@@ -318,9 +327,15 @@
     drag = null;
   }
 
+  /*
+   * Tapping an empty spot goes straight to the camera — that spot is the
+   * missing angle, so shooting it is what you came to do. "Add photos" is
+   * still there for anything already in the camera roll.
+   */
   function pendPick(key) {
     pickFiles({
       multiple: false,
+      capture: true,
       onFiles: function (files) { assignFiles(files, key); }
     });
   }
@@ -702,8 +717,19 @@
 
   /* ── performer details ───────────────────────────────────────── */
 
+  var Fmt = window.HairSelfieFormat || {};
+
+  /* Phone and weight are shown the way they will print. */
+  function tidy(key, value) {
+    if (key === 'phone' && Fmt.phone) return Fmt.phone(value);
+    if (key === 'weight' && Fmt.weight) return Fmt.weight(value);
+    return value == null ? '' : value;
+  }
+
   function fillForm(p) {
-    FIELDS.forEach(function (k) { infoForm.elements[k].value = (p && p[k]) || ''; });
+    FIELDS.forEach(function (k) {
+      infoForm.elements[k].value = tidy(k, (p && p[k]) || '');
+    });
   }
 
   function readForm() {
@@ -726,7 +752,8 @@
      to summarise yet. */
   function renderSummary() {
     var p = readForm();
-    var bits = [p.height, p.weight, p.phone, p.email].filter(Boolean);
+    var bits = [p.height, tidy('weight', p.weight), tidy('phone', p.phone), p.email]
+      .filter(Boolean);
     if (!p.name && !bits.length) {
       summaryText.innerHTML = '<span class="summary-empty">No details yet — tap Edit</span>';
       return;
@@ -925,6 +952,19 @@
       renderSummary();
       persistProfile();
     });
+    /* tidy up on the way out of the field, never mid-keystroke */
+    ['phone', 'weight'].forEach(function (k) {
+      var el = infoForm.elements[k];
+      el.addEventListener('change', function () {
+        var next = tidy(k, el.value.trim());
+        if (next !== el.value) {
+          el.value = next;
+          renderSummary();
+          persistProfile();
+        }
+      });
+    });
+
     noteInput.addEventListener('input', updateNoteCount);
     updateNoteCount();
 

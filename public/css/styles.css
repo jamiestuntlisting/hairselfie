@@ -642,13 +642,17 @@ input[type="search"].is-locked {
 .check {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14.5px;
+  gap: 11px;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.25;
   color: var(--text);
   cursor: pointer;
   user-select: none;
+  /* a comfortable thumb target, not just a bigger word */
+  padding: 7px 2px;
 }
-.check input { accent-color: var(--accent); width: 18px; height: 18px; }
+.check input { accent-color: var(--accent); width: 24px; height: 24px; flex: 0 0 auto; }
 
 
 /* ── Compact details ─────────────────────────────────────────────── */

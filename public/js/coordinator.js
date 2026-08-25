@@ -35,6 +35,12 @@
 
   function firstName(p) { return String(p.name || '').split(' ')[0] || 'them'; }
 
+  /* weights always carry their unit, here as on the sheet */
+  function fmtWeight(v) {
+    var f = window.HairSelfieFormat;
+    return f && f.weight ? f.weight(v) : (v || '');
+  }
+
   function store(key, value) {
     try { localStorage.setItem(key, value); } catch (e) { /* private mode */ }
   }
@@ -143,7 +149,7 @@
     var box = $('#send-box');
     var link = requestLinkFor(p);
     var who = esc(firstName(p));
-    var meta = [p.height, p.weight].filter(Boolean).join(' · ');
+    var meta = [p.height, fmtWeight(p.weight)].filter(Boolean).join(' · ');
 
     box.hidden = false;
     box.innerHTML =
@@ -213,7 +219,7 @@
         return;
       }
       list.innerHTML = hits.map(function (p, i) {
-        var meta = [p.height, p.weight].filter(Boolean).join(' · ');
+        var meta = [p.height, fmtWeight(p.weight)].filter(Boolean).join(' · ');
         return '<button type="button" class="ac-item" role="option" id="ac-opt-' + i + '">' +
           '<span>' + esc(p.name) + '</span>' +
           (meta ? '<span class="ac-meta">' + esc(meta) + '</span>' : '') +
