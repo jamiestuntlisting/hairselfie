@@ -46,12 +46,12 @@
     <div class="panel-head panel-head-plain">
       <h2>You</h2>
     </div>
-    <p class="hint">Requests go out under this name and id. StuntListing will pass the real
-      coordinator id in as <code>?c=</code> later; until then it is set here.</p>
+    <p class="hint">Requests go out under this id. The name comes from the user table —
+      StuntListing will pass the id in as <code>?c=</code> later; until then set it here.</p>
     <div class="who-row">
       <div class="field">
-        <label for="c-name">Your name</label>
-        <input id="c-name" type="text" placeholder="Coordinator name" autocomplete="name">
+        <span class="field-label">Your name</span>
+        <div class="readonly-value" id="c-name" aria-live="polite">—</div>
       </div>
       <div class="field field-narrow">
         <label for="c-id">Coordinator id</label>
@@ -69,6 +69,7 @@
 
 <script src="js/config.js"></script>
 <script src="js/graphql.js"></script>
+<script src="js/resolve.js"></script>
 <script src="js/api.js"></script>
 <script src="js/coordinator.js"></script>
 </body>
