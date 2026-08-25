@@ -197,6 +197,39 @@ window.HairSelfieApi = (function () {
    * flags do not apply here. Same for isAdminApproved. Decided, not
    * overlooked — don't reinstate without asking.
    */
+  /*
+   * Pull the rows out of whatever shape the server answered with: a bare
+   * list, a paginated wrapper around one, or — since the field is named
+   * `searchUser`, singular — possibly a single user.
+   */
+  function rowsIn(data) {
+    var root = null;
+    Object.keys(data || {}).some(function (k) { root = data[k]; return true; });
+    if (!root) return [];
+    if (Array.isArray(root)) return root;
+    if (typeof root !== 'object') return [];
+
+    var nested = null;
+    Object.keys(root).some(function (k) {
+      if (Array.isArray(root[k])) { nested = root[k]; return true; }
+      return false;
+    });
+    if (nested) return nested;
+
+    /* a lone user is still a result */
+    return (root.id != null || root.user_id != null || root.first_name) ? [root] : [];
+  }
+
+  /* Only needed when the server has no search argument and hands back
+     everyone — then the matching is ours to do. */
+  function matches(p, q) {
+    var needle = String(q || '').trim().toLowerCase();
+    if (!needle) return true;
+    return [p.name, p.alias, p.email, p.phone].some(function (v) {
+      return String(v || '').toLowerCase().indexOf(needle) !== -1;
+    });
+  }
+
   function toPerson(u) {
     if (!u) return {};
     var full = [u.first_name, u.last_name].filter(Boolean).join(' ').trim();
@@ -266,21 +299,23 @@ window.HairSelfieApi = (function () {
         args: ['search', 'query', 'keyword', 'term', 'text', 'name'],
         argType: 'String!',
         sample: q || 'a',
-        selection: 'id',
+        selection: '__typename',
         opName: 'searchUser',
         request: GQL.request
       }).then(function (sig) {
-        var doc = 'query ' + sig.field + '($v: String!) { ' +
-                  sig.field + '(' + sig.arg + ': $v) { ' + USER_FIELDS + ' } }';
-        return GQL.request(doc, { v: q });
-      }).then(function (data) {
-        /* take whichever root field the server answered with */
-        var list = null;
-        Object.keys(data || {}).some(function (k) {
-          if (Array.isArray(data[k])) { list = data[k]; return true; }
-          return false;
+        var doc = sig.arg
+          ? 'query ' + sig.field + '($v: ' + (sig.argType || 'String!') + ') { ' +
+            sig.field + '(' + sig.arg + ': $v) { ' + USER_FIELDS + ' } }'
+          : 'query ' + sig.field + ' { ' + sig.field + ' { ' + USER_FIELDS + ' } }';
+        return GQL.request(doc, sig.arg ? { v: q } : {}).then(function (data) {
+          return { data: data, filtered: !sig.arg };
         });
-        return (list || []).map(toPerson);
+      }).then(function (res) {
+        var list = rowsIn(res.data);
+        var people = list.map(toPerson);
+        /* a field that takes no search argument returns everyone, so the
+           matching has to happen here */
+        return res.filtered ? people.filter(function (p) { return matches(p, q); }) : people;
       });
     },
 
@@ -299,11 +334,11 @@ window.HairSelfieApi = (function () {
         args: ['user_id', 'id', 'userId'],
         argType: 'Int!',
         sample: parseInt(id, 10),
-        selection: 'id',
+        selection: '__typename',
         opName: 'userById',
         request: GQL.request
       }).then(function (sig) {
-        var doc = 'query ' + sig.field + '($v: Int!) { ' +
+        var doc = 'query ' + sig.field + '($v: ' + (sig.argType || 'Int!') + ') { ' +
                   sig.field + '(' + sig.arg + ': $v) { ' + USER_FIELDS + ' } }';
         return GQL.request(doc, { v: parseInt(id, 10) });
       }).then(function (data) {

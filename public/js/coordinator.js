@@ -256,7 +256,14 @@
         render(hits);
       }).catch(function (err) {
         if (mine !== seq) return;
-        list.innerHTML = '<div class="ac-empty">Search failed — ' + esc(err.message) + '</div>';
+        /* show everything the server said, not just the first line — the
+           useful part is often the second */
+        var R = window.StuntListingResolve;
+        var msgs = R && R.messagesIn ? R.messagesIn(err) : [err.message];
+        list.innerHTML = '<div class="ac-empty">Search failed — ' +
+          msgs.map(esc).join('<br>') +
+          '<br><span class="ac-meta">Run <b>StuntListingResolve.report(\'searchUser\')</b> ' +
+          'in the console for the full answer.</span></div>';
         list.hidden = false;
       });
     }, 170);
