@@ -56,9 +56,35 @@
     if (id) store(LS_ID, id);
     return {
       id: id || read(LS_ID) || coordCfg.defaultId || '33',
+      /* only a cached label; the real name is looked up from the id */
       name: read(LS_NAME) || coordCfg.defaultName || 'Coordinator'
     };
   })();
+
+  /*
+   * The coordinator's name is not typed — it belongs to their user id, so it
+   * is fetched from the user table. Demo mode has no user table, so the name
+   * stays as the placeholder there.
+   */
+  function loadMyName() {
+    var nameEl = $('#c-name');
+    if (!me.id) return;
+    if (Api.mode !== 'stuntlisting') {
+      if (nameEl) nameEl.textContent = me.name + ' (demo)';
+      return;
+    }
+    if (nameEl) nameEl.textContent = 'Looking up #' + me.id + '…';
+
+    Api.getUserById(me.id).then(function (user) {
+      me.name = user.name || me.name;
+      store(LS_NAME, me.name);
+      renderMe();
+      if (!$('#send-box').hidden && lastPicked) renderSendBox(lastPicked);
+    }).catch(function (err) {
+      if (nameEl) nameEl.textContent = me.name;
+      $('#who-status').textContent = 'Could not look up #' + me.id + ' — ' + err.message;
+    });
+  }
 
   function renderMe() {
     var chip = $('#session-chip');
@@ -67,27 +93,27 @@
     }
     var nameEl = $('#c-name');
     var idEl = $('#c-id');
-    if (nameEl && nameEl.value !== me.name) nameEl.value = me.name;
+    if (nameEl) nameEl.textContent = me.name;
     if (idEl && idEl.value !== me.id) idEl.value = me.id;
   }
 
   function wireMe() {
-    var nameEl = $('#c-name');
     var idEl = $('#c-id');
-    if (!nameEl || !idEl) return;
+    if (!idEl) return;
 
+    /* Only the id is editable. Changing it re-reads the name from the user
+       table, since the name belongs to the id. */
     var save = debounce(function () {
-      me.name = nameEl.value.trim() || (coordCfg.defaultName || 'Coordinator');
-      me.id = idEl.value.trim() || (coordCfg.defaultId || '33');
-      store(LS_NAME, me.name);
+      var next = idEl.value.trim() || (coordCfg.defaultId || '33');
+      if (next === me.id) return;
+      me.id = next;
       store(LS_ID, me.id);
+      $('#who-status').textContent = '';
       renderMe();
-      $('#who-status').textContent = 'Saved.';
-      /* a link already on screen was built with the old id */
+      loadMyName();
       if (!$('#send-box').hidden && lastPicked) renderSendBox(lastPicked);
-    }, 400);
+    }, 500);
 
-    nameEl.addEventListener('input', save);
     idEl.addEventListener('input', save);
   }
 
@@ -244,6 +270,7 @@
     wireSearch();
     wireMe();
     renderMe();
+    loadMyName();
 
     var input = $('#perf-search');
     $('#coord-badge').hidden = false;
