@@ -5,6 +5,7 @@
  *   HairSelfieApi.getSession()          → Promise<{ user, coordinator, signedOut }>
  *   HairSelfieApi.searchPerformers(q)   → Promise<[{id,name,height,weight,phone,email}, …]>
  *   HairSelfieApi.getPerformer(token)   → Promise<{id,name,…}>
+ *   HairSelfieApi.getUserById(id)       → Promise<{id,name,…}>
  *   HairSelfieApi.login(email, pass)    → Promise
  *
  * In 'demo' mode everything is local: the profile lives in localStorage and
@@ -152,6 +153,12 @@ window.HairSelfieApi = (function () {
       return hit ? delay(90, hit) : Promise.reject(new Error('performer not found'));
     },
 
+    /* Demo mode has no user table, so a coordinator id resolves to nothing
+       rather than to an invented person. */
+    getUserById: function () {
+      return Promise.reject(new Error('no user table in demo mode'));
+    },
+
     login: function () {
       return Promise.reject(new Error('Sign-in is only available once connected to StuntListing'));
     },
@@ -242,18 +249,75 @@ window.HairSelfieApi = (function () {
       });
     },
 
+    /*
+     * The API told us the field is `searchUser` (its error suggested it over
+     * our `searchUsers`), but not what the argument is called. Rather than
+     * guess again, the signature is resolved from the server's own messages
+     * once and then cached — see js/resolve.js.
+     */
     searchPerformers: function (q) {
       var GQL = window.StuntListingGQL;
-      return GQL.request(GQL.QUERIES.searchPerformers, { search: q })
-        .then(function (data) {
-          /* take whichever root field the server answered with */
-          var list = null;
-          Object.keys(data || {}).some(function (k) {
-            if (Array.isArray(data[k])) { list = data[k]; return true; }
-            return false;
-          });
-          return (list || []).map(toPerson);
+      var R = window.StuntListingResolve;
+      var USER_FIELDS = 'id first_name last_name alias nickname phone_number email';
+
+      return R.resolve({
+        cacheKey: 'searchUser',
+        fields: ['searchUser', 'adminSearchUsers', 'getAllUsers', 'searchUsers'],
+        args: ['search', 'query', 'keyword', 'term', 'text', 'name'],
+        argType: 'String!',
+        sample: q || 'a',
+        selection: 'id',
+        opName: 'searchUser',
+        request: GQL.request
+      }).then(function (sig) {
+        var doc = 'query ' + sig.field + '($v: String!) { ' +
+                  sig.field + '(' + sig.arg + ': $v) { ' + USER_FIELDS + ' } }';
+        return GQL.request(doc, { v: q });
+      }).then(function (data) {
+        /* take whichever root field the server answered with */
+        var list = null;
+        Object.keys(data || {}).some(function (k) {
+          if (Array.isArray(data[k])) { list = data[k]; return true; }
+          return false;
         });
+        return (list || []).map(toPerson);
+      });
+    },
+
+    /*
+     * One user by their id — used for the coordinator's own name, which is
+     * set by their user id rather than typed. Same resolution trick.
+     */
+    getUserById: function (id) {
+      var GQL = window.StuntListingGQL;
+      var R = window.StuntListingResolve;
+      var USER_FIELDS = 'id first_name last_name alias nickname';
+
+      return R.resolve({
+        cacheKey: 'userById',
+        fields: ['userDetails', 'getUser', 'user', 'getUserById', 'userProfile'],
+        args: ['user_id', 'id', 'userId'],
+        argType: 'Int!',
+        sample: parseInt(id, 10),
+        selection: 'id',
+        opName: 'userById',
+        request: GQL.request
+      }).then(function (sig) {
+        var doc = 'query ' + sig.field + '($v: Int!) { ' +
+                  sig.field + '(' + sig.arg + ': $v) { ' + USER_FIELDS + ' } }';
+        return GQL.request(doc, { v: parseInt(id, 10) });
+      }).then(function (data) {
+        var u = null;
+        Object.keys(data || {}).some(function (k) {
+          if (data[k] && typeof data[k] === 'object' && !Array.isArray(data[k])) {
+            u = data[k];
+            return true;
+          }
+          return false;
+        });
+        if (!u) throw new Error('user not found');
+        return toPerson(u);
+      });
     },
 
     /* Members of one of the coordinator's lists, as an alternative to a
