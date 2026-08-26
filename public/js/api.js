@@ -297,6 +297,9 @@ window.HairSelfieApi = (function () {
         cacheKey: 'searchUser',
         fields: ['searchUser', 'adminSearchUsers', 'getAllUsers', 'searchUsers'],
         args: ['search', 'query', 'keyword', 'term', 'text', 'name'],
+        /* getMyProfile is a real field the server may suggest, but it
+           answers "who am I", not "who matches this text" */
+        avoid: [/my ?profile/i, /^me$/i],
         argType: 'String!',
         sample: q || 'a',
         selection: '__typename',
@@ -332,6 +335,7 @@ window.HairSelfieApi = (function () {
         cacheKey: 'userById',
         fields: ['userDetails', 'getUser', 'user', 'getUserById', 'userProfile'],
         args: ['user_id', 'id', 'userId'],
+        avoid: [/my ?profile/i, /^me$/i],
         argType: 'Int!',
         sample: parseInt(id, 10),
         selection: '__typename',
@@ -351,6 +355,14 @@ window.HairSelfieApi = (function () {
           return false;
         });
         if (!u) throw new Error('user not found');
+        /* Make sure we were answered about the person we asked about: a
+           resolved-by-guesswork query could easily be "the signed-in user"
+           instead, and showing the wrong name would look like it worked. */
+        var got = u.user_id != null ? u.user_id : u.id;
+        if (got != null && String(got) !== String(id)) {
+          R.forget('userById');
+          throw new Error('that query returned #' + got + ', not #' + id);
+        }
         return toPerson(u);
       });
     },

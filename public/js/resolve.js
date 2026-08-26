@@ -105,7 +105,7 @@ window.StuntListingResolve = (function () {
       /* a complaint about a *missing* argument means the field itself is
          right, and usually names the argument it wants */
       missingArg: /argument .*(is required|of required type)/i.test(m),
-      needsSelection: /must have a selection set/i.test(m),
+      needsSelection: /must have a selection (?:set|of subfields)/i.test(m),
       suggestions: allSuggestions(msgs)
     };
   }
@@ -122,9 +122,14 @@ window.StuntListingResolve = (function () {
     return m ? m[1] : null;
   }
 
-  /* The type in "Field X of type "[User!]!" must have a selection set". */
+  /* The type in:
+       Field "x" of type "[User!]!" must have a selection of subfields.
+       Field "x" of type "[User!]!" must have a selection set.
+     Servers word this differently; both mean the same thing, and both
+     name the type. */
   function returnTypeIn(message) {
-    var m = String(message || '').match(/of type ["'`]([^"'`]+)["'`] must have a selection set/i);
+    var m = String(message || '')
+      .match(/of type ["'`]([^"'`]+)["'`] must have a selection (?:set|of subfields)/i);
     return m ? m[1] : null;
   }
 
@@ -160,7 +165,9 @@ window.StuntListingResolve = (function () {
 
       var info = {
         field: field,
-        exists: c.needsSelection || c.missingArg,
+        /* the only error that means "no such field" is that one; every
+           other complaint is about how we called a field that exists */
+        exists: !c.unknownField,
         type: firstIn(c.messages, returnTypeIn),
         arg: c.missingArg ? firstIn(c.messages, requiredArgIn) : null,
         argType: c.missingArg ? firstIn(c.messages, requiredArgTypeIn) : null,
@@ -204,6 +211,14 @@ window.StuntListingResolve = (function () {
     if (cached && cached.field) return Promise.resolve(cached);
 
     var selection = spec.selection || '__typename';
+
+    /* Some suggestions are false friends: getMyProfile is a real field, but
+       it answers "who am I", not "who is #33". */
+    function avoided(name) {
+      return (spec.avoid || []).some(function (bad) {
+        return bad instanceof RegExp ? bad.test(name) : bad === name;
+      });
+    }
     var queue = spec.fields.slice();
     var tried = {};
     var attempts = 0;
@@ -259,7 +274,10 @@ window.StuntListingResolve = (function () {
       return describe(field, spec.request).then(function (info) {
         if (!info.exists) {
           lastError = new Error(info.messages[0] || ('No field "' + field + '"'));
-          queue = promote(queue, (info.suggestions || []).filter(function (s) { return !tried[s]; }));
+          var worth = (info.suggestions || []).filter(function (s) {
+            return !tried[s] && !avoided(s);
+          });
+          queue = promote(queue, worth);
           return step();
         }
 
