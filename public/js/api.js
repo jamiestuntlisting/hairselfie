@@ -199,25 +199,44 @@ window.HairSelfieApi = (function () {
    */
   /*
    * Pull the rows out of whatever shape the server answered with: a bare
-   * list, a paginated wrapper around one, or — since the field is named
-   * `searchUser`, singular — possibly a single user.
+   * list, a Relay-style edges/node wrapper, a paginated object around one,
+   * or — since the field is named `searchUser`, singular — a single user.
    */
-  function rowsIn(data) {
-    var root = null;
-    Object.keys(data || {}).some(function (k) { root = data[k]; return true; });
-    if (!root) return [];
-    if (Array.isArray(root)) return root;
-    if (typeof root !== 'object') return [];
+  function rowsUnder(node) {
+    if (!node) return [];
+    if (Array.isArray(node)) {
+      return node.filter(function (r) { return r && typeof r === 'object'; });
+    }
+    if (typeof node !== 'object') return [];
+
+    if (Array.isArray(node.edges)) {
+      return node.edges.map(function (e) { return e && e.node ? e.node : e; })
+        .filter(function (r) { return r && typeof r === 'object'; });
+    }
 
     var nested = null;
-    Object.keys(root).some(function (k) {
-      if (Array.isArray(root[k])) { nested = root[k]; return true; }
+    Object.keys(node).some(function (k) {
+      if (Array.isArray(node[k])) { nested = node[k]; return true; }
       return false;
     });
-    if (nested) return nested;
+    if (nested) return nested.filter(function (r) { return r && typeof r === 'object'; });
 
     /* a lone user is still a result */
-    return (root.id != null || root.user_id != null || root.first_name) ? [root] : [];
+    return (node.id != null || node.user_id != null || node.first_name) ? [node] : [];
+  }
+
+  /* Walk to wherever resolveRows found the rows. A step through a list
+     applies to each of its entries — that is what edges → node is. */
+  function rowsAt(data, field, path) {
+    var node = (data || {})[field];
+    (path || []).forEach(function (k) {
+      if (Array.isArray(node)) {
+        node = node.map(function (el) { return el ? el[k] : el; });
+      } else {
+        node = node ? node[k] : node;
+      }
+    });
+    return rowsUnder(node);
   }
 
   /* Only needed when the server has no search argument and hands back
@@ -291,7 +310,12 @@ window.HairSelfieApi = (function () {
     searchPerformers: function (q) {
       var GQL = window.StuntListingGQL;
       var R = window.StuntListingResolve;
-      var USER_FIELDS = 'id first_name last_name alias nickname phone_number email';
+      /* Asked for individually rather than as one string: the server names
+         any field its type does not have, and resolveRows drops those and
+         asks again — so wanting too much costs nothing. */
+      var USER_FIELDS = ['id', 'user_id', 'first_name', 'last_name', 'alias',
+                         'nickname', 'height', 'weight', 'phone_number',
+                         'phone_number_formatted', 'email', 'hair_color'];
 
       return R.resolve({
         cacheKey: 'searchUser',
@@ -306,19 +330,21 @@ window.HairSelfieApi = (function () {
         opName: 'searchUser',
         request: GQL.request
       }).then(function (sig) {
-        var doc = sig.arg
-          ? 'query ' + sig.field + '($v: ' + (sig.argType || 'String!') + ') { ' +
-            sig.field + '(' + sig.arg + ': $v) { ' + USER_FIELDS + ' } }'
-          : 'query ' + sig.field + ' { ' + sig.field + ' { ' + USER_FIELDS + ' } }';
-        return GQL.request(doc, sig.arg ? { v: q } : {}).then(function (data) {
-          return { data: data, filtered: !sig.arg };
+        return R.resolveRows({
+          cacheKey: 'searchUserRows',
+          field: sig.field,
+          arg: sig.arg,
+          argType: sig.argType,
+          sample: q,
+          fields: USER_FIELDS,
+          opName: 'searchUser',
+          request: GQL.request
+        }).then(function (found) {
+          var people = rowsAt(found.data, sig.field, found.path).map(toPerson);
+          /* a field that takes no search argument returns everyone, so the
+             matching has to happen here */
+          return sig.arg ? people : people.filter(function (p) { return matches(p, q); });
         });
-      }).then(function (res) {
-        var list = rowsIn(res.data);
-        var people = list.map(toPerson);
-        /* a field that takes no search argument returns everyone, so the
-           matching has to happen here */
-        return res.filtered ? people.filter(function (p) { return matches(p, q); }) : people;
       });
     },
 
@@ -329,7 +355,9 @@ window.HairSelfieApi = (function () {
     getUserById: function (id) {
       var GQL = window.StuntListingGQL;
       var R = window.StuntListingResolve;
-      var USER_FIELDS = 'id first_name last_name alias nickname';
+      var USER_FIELDS = ['id', 'user_id', 'first_name', 'last_name', 'alias',
+                         'nickname', 'height', 'weight', 'phone_number',
+                         'phone_number_formatted', 'email', 'hair_color'];
 
       return R.resolve({
         cacheKey: 'userById',
@@ -342,18 +370,19 @@ window.HairSelfieApi = (function () {
         opName: 'userById',
         request: GQL.request
       }).then(function (sig) {
-        var doc = 'query ' + sig.field + '($v: ' + (sig.argType || 'Int!') + ') { ' +
-                  sig.field + '(' + sig.arg + ': $v) { ' + USER_FIELDS + ' } }';
-        return GQL.request(doc, { v: parseInt(id, 10) });
-      }).then(function (data) {
-        var u = null;
-        Object.keys(data || {}).some(function (k) {
-          if (data[k] && typeof data[k] === 'object' && !Array.isArray(data[k])) {
-            u = data[k];
-            return true;
-          }
-          return false;
+        return R.resolveRows({
+          cacheKey: 'userByIdRows',
+          field: sig.field,
+          arg: sig.arg,
+          argType: sig.argType || 'Int!',
+          sample: parseInt(id, 10),
+          fields: USER_FIELDS,
+          opName: 'userById',
+          request: GQL.request
+        }).then(function (found) {
+          return rowsAt(found.data, sig.field, found.path)[0];
         });
+      }).then(function (u) {
         if (!u) throw new Error('user not found');
         /* Make sure we were answered about the person we asked about: a
            resolved-by-guesswork query could easily be "the signed-in user"
@@ -361,6 +390,7 @@ window.HairSelfieApi = (function () {
         var got = u.user_id != null ? u.user_id : u.id;
         if (got != null && String(got) !== String(id)) {
           R.forget('userById');
+          R.forget('userByIdRows');
           throw new Error('that query returned #' + got + ', not #' + id);
         }
         return toPerson(u);

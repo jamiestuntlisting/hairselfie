@@ -199,6 +199,129 @@ window.StuntListingResolve = (function () {
     });
   }
 
+  /* "Cannot query field "id" on type "SearchResponseType"." — the field we
+     asked for, and the type that does not have it. */
+  function unknownFieldsIn(messages) {
+    var out = [];
+    messages.forEach(function (m) {
+      var x = String(m).match(
+        /Cannot query field ["'`]([A-Za-z_][A-Za-z0-9_]*)["'`] on type ["'`]([^"'`]+)["'`]/i);
+      if (x) out.push({ field: x[1], type: x[2] });
+    });
+    return out;
+  }
+
+  /* Where rows tend to live when a query wraps them. */
+  var CONTAINERS = ['users', 'data', 'results', 'items', 'records', 'rows',
+                    'nodes', 'list', 'hits', 'edges', 'user', 'performers', 'profiles'];
+
+  function unwrap(t) {
+    while (t && (t.kind === 'NON_NULL' || t.kind === 'LIST')) t = t.ofType;
+    return t || {};
+  }
+
+  function isList(t) {
+    while (t && t.kind === 'NON_NULL') t = t.ofType;
+    return !!(t && t.kind === 'LIST');
+  }
+
+  /*
+   * What object-ish fields does this type have? Introspection answers
+   * outright; when it is switched off, fall back to the usual names.
+   */
+  function containersFor(typeName, request) {
+    var doc = 'query TypeShape($n: String!) { __type(name: $n) { fields { name type { ' +
+              'kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } }';
+    return request(doc, { n: typeName }).then(function (data) {
+      var fields = (((data || {}).__type || {}).fields) || [];
+      var objects = fields.filter(function (f) { return unwrap(f.type).kind === 'OBJECT'; });
+      note({ probe: 'shape of ' + typeName, result: objects.map(function (f) { return f.name; }).join(', ') || '(none)' });
+      if (!objects.length) return CONTAINERS.slice();
+      /* a list of objects is far more likely to be the rows than a single
+         nested object, so try those first */
+      var lists = objects.filter(function (f) { return isList(f.type); })
+        .map(function (f) { return f.name; });
+      var rest = objects.map(function (f) { return f.name; });
+      return promote(rest, lists);
+    }, function (err) {
+      note({ probe: 'shape of ' + typeName, result: messagesIn(err).join(' | ') });
+      return CONTAINERS.slice();
+    });
+  }
+
+  /*
+   * Work out where the rows sit inside a response and which of the fields
+   * we want actually exist on them.
+   *
+   * Two things go wrong here and the server names both: a field we asked
+   * for that the type does not have (drop it and ask again), and *every*
+   * field being wrong, which means we are a level too high — the rows are
+   * inside something like SearchResponseType.users.
+   *
+   * spec: { cacheKey, field, arg, argType, sample, fields[], opName, request }
+   * → { path: ['users'], fields: [...], data }
+   */
+  function resolveRows(spec) {
+    var request = spec.request;
+    var MAX_DEPTH = 2;
+    var cached = recall(spec.cacheKey);
+
+    function docFor(path, fields) {
+      var inner = fields.join(' ');
+      for (var i = path.length - 1; i >= 0; i--) inner = path[i] + ' { ' + inner + ' }';
+      return spec.arg
+        ? 'query ' + (spec.opName || 'Rows') + '($v: ' + (spec.argType || 'String!') + ') { ' +
+          spec.field + '(' + spec.arg + ': $v) { ' + inner + ' } }'
+        : 'query ' + (spec.opName || 'Rows') + ' { ' + spec.field + ' { ' + inner + ' } }';
+    }
+
+    function run(path, fields) {
+      var doc = docFor(path, fields);
+      return request(doc, spec.arg ? { v: spec.sample } : {}).then(function (data) {
+        note({ probe: doc, result: 'ok' });
+        return { path: path, fields: fields, data: data };
+      });
+    }
+
+    function tryPath(path, fields, depth) {
+      if (!fields.length) return Promise.reject(new Error('nothing left to ask for'));
+      return run(path, fields).catch(function (err) {
+        var msgs = messagesIn(err);
+        note({ probe: docFor(path, fields), result: msgs.join(' | ') });
+        var unknown = unknownFieldsIn(msgs);
+        if (!unknown.length) throw err;
+
+        var kept = fields.filter(function (f) {
+          return !unknown.some(function (u) { return u.field === f; });
+        });
+        /* some of what we asked for exists — drop the rest and take it */
+        if (kept.length) return tryPath(path, kept, depth);
+
+        /* none of it does: the rows are one level further in */
+        if (depth >= MAX_DEPTH) throw err;
+        return containersFor(unknown[0].type, request).then(function (names) {
+          return names.reduce(function (chain, name) {
+            return chain.catch(function () {
+              return tryPath(path.concat(name), spec.fields.slice(), depth + 1);
+            });
+          }, Promise.reject(err));
+        });
+      });
+    }
+
+    var start = cached && cached.fields && cached.fields.length
+      ? run(cached.path || [], cached.fields).catch(function () {
+          forget(spec.cacheKey);
+          return tryPath([], spec.fields.slice(), 0);
+        })
+      : tryPath([], spec.fields.slice(), 0);
+
+    return start.then(function (found) {
+      remember(spec.cacheKey, { path: found.path, fields: found.fields });
+      return found;
+    });
+  }
+
   /*
    * spec: {
    *   cacheKey, fields[], args[], argType, sample, selection, opName, request
@@ -324,6 +447,7 @@ window.StuntListingResolve = (function () {
 
   return {
     resolve: resolve,
+    resolveRows: resolveRows,
     describe: describe,
     report: report,
     forget: forget,
@@ -332,6 +456,7 @@ window.StuntListingResolve = (function () {
     messagesIn: messagesIn,
     suggestionsIn: suggestionsIn,
     classify: classify,
+    unknownFieldsIn: unknownFieldsIn,
     requiredArgIn: requiredArgIn,
     requiredArgTypeIn: requiredArgTypeIn,
     returnTypeIn: returnTypeIn
