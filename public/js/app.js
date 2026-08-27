@@ -19,7 +19,6 @@
   var defByKey = {};
   SLOT_DEFS.forEach(function (d) { defByKey[d.key] = d; });
 
-  var LS_PREFS = 'hairselfie.prefs';
   var DRAG_HOLD_MS = 280;   // long-press before a touch drag starts
   var DRAG_SLOP = 8;        // px of movement that counts as a drag, not a tap
 
@@ -153,7 +152,6 @@
           (def.facing ? '<span class="cell-facing">' + esc(def.facing) + '</span>' : '') +
           '<span class="cell-cta">' + esc(EMPTY_CTA) + '</span>' +
         '</div>' +
-        '<div class="cell-guide">' + Outlines.svgMarkup(def.outline, def.mirror) + '</div>' +
         '<span class="cell-tag">' + esc(def.label) + '</span>' +
         '<div class="cell-tools">' +
           '<button type="button" data-act="adjust" title="Adjust framing" aria-label="Adjust ' + esc(def.label) + '">✎</button>' +
@@ -930,26 +928,6 @@
 
   /* ── static wiring & init ────────────────────────────────────── */
 
-  function readPrefs() {
-    try { return JSON.parse(localStorage.getItem(LS_PREFS)) || {}; } catch (e) { return {}; }
-  }
-
-  function loadPrefs() {
-    var prefs = readPrefs();
-    var guides = prefs.guides !== false;
-    var g = $('#toggle-guides');
-    if (g) g.checked = guides;
-    grid.classList.toggle('guides-on', guides);
-  }
-
-  /* Merged, not replaced: the two pages share one store. */
-  function savePrefs() {
-    var prefs = readPrefs();
-    var g = $('#toggle-guides');
-    if (g) prefs.guides = g.checked;
-    try { localStorage.setItem(LS_PREFS, JSON.stringify(prefs)); } catch (e) { /* ignore */ }
-  }
-
   function wireStatic() {
     $('#add-photos').addEventListener('click', function () {
       pickFiles({
@@ -961,14 +939,6 @@
       });
     });
     $('#take-photos').addEventListener('click', startCapture);
-
-    var guidesToggle = $('#toggle-guides');
-    if (guidesToggle) {
-      guidesToggle.addEventListener('change', function (e) {
-        grid.classList.toggle('guides-on', e.target.checked);
-        savePrefs();
-      });
-    }
 
     infoForm.addEventListener('submit', function (e) { e.preventDefault(); });
     infoForm.addEventListener('input', function () {
@@ -1035,7 +1005,6 @@
 
   function init() {
     buildGrid();
-    loadPrefs();
     wireStatic();
     wireAdjust();
     updateCreateStatus();

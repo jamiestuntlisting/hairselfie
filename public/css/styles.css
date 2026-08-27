@@ -161,16 +161,6 @@ main {
 
 .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
 
-.toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 13.5px;
-  color: var(--muted);
-  cursor: pointer;
-  user-select: none;
-}
-.toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
 
 .photo-actions {
   display: flex;
@@ -255,24 +245,6 @@ input:focus-visible, select:focus-visible, .btn:focus-visible {
 .cell-empty .cell-name { font-size: 15px; font-weight: 700; color: #ccd3de; }
 .cell-empty .cell-facing { font-size: 11.5px; font-weight: 600; color: var(--accent); letter-spacing: 0.2px; }
 .cell-empty .cell-cta { font-size: 11.5px; color: #6d7685; }
-
-/* faint guide over a placed photo (toggleable) */
-.cell-guide {
-  position: absolute;
-  inset: 0;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-.cell-guide svg {
-  width: 88%;
-  height: auto;
-  color: rgba(255, 255, 255, 0.5);
-  filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.9));
-  opacity: 0.55;
-}
-.grid.guides-on .cell.occupied .cell-guide { display: flex; }
 
 .cell-tag {
   position: absolute;
