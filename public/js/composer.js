@@ -20,6 +20,34 @@ window.Composer = (function () {
     { key: 'back',  label: 'Back',       outline: 'front',   mirror: false, facing: '' }
   ];
 
+  /*
+   * One photo instead of four. Same info band underneath — the band does
+   * not care how many cells are above it.
+   */
+  var HEADSHOT_DEFS = [
+    { key: 'front', label: 'Headshot', outline: 'front', mirror: false, facing: '' }
+  ];
+
+  var LAYOUTS = {
+    sheet:    { cols: 2, rows: 2, cellWidth: 1000, cellHeight: 1250, defs: SLOT_DEFS },
+    headshot: { cols: 1, rows: 1, cellWidth: 1600, cellHeight: 2000, defs: HEADSHOT_DEFS }
+  };
+
+  /* A layout, with anything set in config applied over it. */
+  function layoutFor(name) {
+    var base = LAYOUTS[name] || LAYOUTS.sheet;
+    var out = (window.HAIRSELFIE_CONFIG && window.HAIRSELFIE_CONFIG.output) || {};
+    var over = (name === 'headshot' ? out.headshot : out) || {};
+    return {
+      name: LAYOUTS[name] ? name : 'sheet',
+      cols: base.cols,
+      rows: base.rows,
+      cellWidth: over.cellWidth || base.cellWidth,
+      cellHeight: over.cellHeight || base.cellHeight,
+      defs: base.defs
+    };
+  }
+
   var FONT_STACK = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 
   function clamp(v, lo, hi) {
@@ -214,23 +242,33 @@ window.Composer = (function () {
    *   │  [CUT] [SHAVE]      │
    *   └─────────────────────┘
    */
-  function compose(slots, person) {
-    var out = (window.HAIRSELFIE_CONFIG && window.HAIRSELFIE_CONFIG.output) || {};
-    var CW = out.cellWidth || 1000;
-    var CH = out.cellHeight || 1250;
+  function compose(slots, person, layoutName) {
+    var L = layoutFor(layoutName);
+    var defs = L.defs;
+    var CW = L.cellWidth;
+    var CH = L.cellHeight;
     var GUT = Math.round(CW * 0.016);
-    var M = Math.round(CW * 0.028);
 
-    var W = M * 2 + CW * 2 + GUT;
-    var gridH = CH * 2 + GUT;
-    var fullW = W - M * 2;                       // text runs the full image width
+    var fullW = CW * L.cols + GUT * (L.cols - 1);   // text runs the full image width
+    /*
+     * Type is sized against the image, not against a cell, so a one-photo
+     * headshot and a four-photo sheet carry the same-looking name and
+     * details rather than one of them coming out twice the weight. The
+     * divisor is the sheet's own width-to-cell ratio, so the sheet renders
+     * exactly as it did before this existed.
+     */
+    var TS = fullW / 2.016;
+    var M = Math.round(TS * 0.028);
+
+    var W = fullW + M * 2;
+    var gridH = CH * L.rows + GUT * (L.rows - 1);
     var scratch = document.createElement('canvas').getContext('2d');
 
     /* name — as large as it can be while spanning the sheet */
     var name = ((person && person.name) || '').trim().toUpperCase();
-    var nameSpacing = Math.round(CW * 0.007);
+    var nameSpacing = Math.round(TS * 0.007);
     var nameSize = name
-      ? fitWidth(scratch, name, '800', fullW, 44, Math.round(CW * 0.23), nameSpacing)
+      ? fitWidth(scratch, name, '800', fullW, 44, Math.round(TS * 0.23), nameSpacing)
       : 0;
 
     /* contact details — one line if they fit, otherwise two */
@@ -245,7 +283,7 @@ window.Composer = (function () {
     }).filter(Boolean);
 
     var SEP = '   ·   ';
-    var detailMax = Math.round(CW * 0.085);
+    var detailMax = Math.round(TS * 0.085);
     var detailLines = [];
     if (fields.length) {
       var one = fields.join(SEP);
@@ -268,7 +306,7 @@ window.Composer = (function () {
     var noteSize = 0;
     var noteLines = [];
     if (noteText) {
-      noteSize = Math.round(CW * 0.044);
+      noteSize = Math.round(TS * 0.044);
       scratch.font = '400 ' + noteSize + 'px ' + FONT_STACK;
       noteLines = wrapText(scratch, noteText, Math.round(fullW * 0.94), 2);
     }
@@ -277,18 +315,18 @@ window.Composer = (function () {
     var chips = [];
     if (person && person.canCut) chips.push('ABLE TO CUT HAIR');
     if (person && person.canShave) chips.push('ABLE TO SHAVE');
-    var chipSize = Math.round(CW * 0.048);
+    var chipSize = Math.round(TS * 0.048);
     var chipPadX = Math.round(chipSize * 0.85);
     var chipH = Math.round(chipSize * 2.3);
-    var chipGap = Math.round(CW * 0.022);
+    var chipGap = Math.round(TS * 0.022);
 
     /* vertical rhythm */
-    var gapTop = Math.round(CW * 0.075);
-    var gapBottom = Math.round(CW * 0.075);
-    var lineGap = Math.round(CW * 0.024);
-    var noteGap = Math.round(CW * 0.032);
+    var gapTop = Math.round(TS * 0.075);
+    var gapBottom = Math.round(TS * 0.075);
+    var lineGap = Math.round(TS * 0.024);
+    var noteGap = Math.round(TS * 0.032);
     var noteLineGap = Math.round(noteSize * 0.34);
-    var chipGapTop = Math.round(CW * 0.038);
+    var chipGapTop = Math.round(TS * 0.038);
 
     var infoH = gapTop + gapBottom;
     if (nameSize) infoH += nameSize;
@@ -307,7 +345,7 @@ window.Composer = (function () {
       infoH += chipH;
     }
     if (!nameSize && !detailLines.length && !noteLines.length && !chips.length) {
-      infoH = Math.round(CW * 0.04);
+      infoH = Math.round(TS * 0.04);
     }
 
     var H = M + gridH + infoH;
@@ -320,9 +358,9 @@ window.Composer = (function () {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, W, H);
 
-    SLOT_DEFS.forEach(function (def, i) {
-      var col = i % 2;
-      var row = i >> 1;
+    defs.forEach(function (def, i) {
+      var col = i % L.cols;
+      var row = Math.floor(i / L.cols);
       var x = M + col * (CW + GUT);
       var y = M + row * (CH + GUT);
       var slot = slots[def.key];
@@ -375,7 +413,7 @@ window.Composer = (function () {
       chips.forEach(function (c, i) {
         roundRectPath(ctx, cx, ty, widths[i], chipH, chipH / 2);
         ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-        ctx.lineWidth = Math.max(2, CW * 0.0028);
+        ctx.lineWidth = Math.max(2, TS * 0.0028);
         ctx.stroke();
         ctx.fillStyle = '#fff';
         ctx.fillText(c, cx + chipPadX, ty + chipH / 2 + chipSize * 0.05);
@@ -423,6 +461,7 @@ window.Composer = (function () {
 
   return {
     SLOT_DEFS: SLOT_DEFS,
+    layoutFor: layoutFor,
     drawSlot: drawSlot,
     panLimits: panLimits,
     clampPan: clampPan,

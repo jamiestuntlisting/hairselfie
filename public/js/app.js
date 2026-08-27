@@ -9,7 +9,12 @@
   'use strict';
 
   var Api = window.HairSelfieApi;
-  var SLOT_DEFS = Composer.SLOT_DEFS;
+
+  /* Four photos or one — the page says which, and everything below follows
+     from it. <body data-layout="headshot"> is the only difference. */
+  var LAYOUT = Composer.layoutFor(document.body.dataset.layout || 'sheet');
+  var NOUN = LAYOUT.name === 'headshot' ? 'headshot' : 'sheet';
+  var SLOT_DEFS = LAYOUT.defs;
   var SLOT_KEYS = SLOT_DEFS.map(function (d) { return d.key; });
   var defByKey = {};
   SLOT_DEFS.forEach(function (d) { defByKey[d.key] = d; });
@@ -31,7 +36,7 @@
     : 'Click to add';
 
   var state = {
-    slots: { front: null, left: null, right: null, back: null },
+    slots: SLOT_DEFS.reduce(function (o, d) { o[d.key] = null; return o; }, {}),
     me: {},
     selectedKey: null,   // cell picked for tap-to-swap
     requestFor: null     // performer this page was opened for, via a request link
@@ -81,12 +86,25 @@
   var noteCount = $('#note-count');
   var cutBox = $('#f-cut');
   var shaveBox = $('#f-shave');
+  var toggleBox = $('#field-toggles');
+
+  /* A field switched off is simply not on the image. Nothing else changes:
+     the layout closes up around what is left, down to no text at all. */
+  function fieldOn(key) {
+    if (!toggleBox) return true;
+    var el = toggleBox.querySelector('input[data-field="' + key + '"]');
+    return !el || el.checked;
+  }
 
   var cells = {};
   var resultUrl = null;
   var resultBlob = null;
   var resultName = 'hair-selfie.jpg';
   var captureQueue = [];
+
+  /* The button relabels itself while working, so remember what the page
+     called it rather than assuming. */
+  var createLabel = (createBtn && createBtn.textContent.trim()) || 'Create';
 
   /*
    * Always hand the browser a brand-new <input type="file">. Reusing one
@@ -741,6 +759,7 @@
   /* Everything printed on the sheet: profile fields, note and flags. */
   function readSheet() {
     var o = readForm();
+    FIELDS.forEach(function (k) { if (!fieldOn(k)) o[k] = ''; });
     o.note = noteInput.value.trim();
     o.canCut = cutBox.checked;
     o.canShave = shaveBox.checked;
@@ -752,14 +771,25 @@
      to summarise yet. */
   function renderSummary() {
     var p = readForm();
-    var bits = [p.height, tidy('weight', p.weight), tidy('phone', p.phone), p.email]
-      .filter(Boolean);
-    if (!p.name && !bits.length) {
-      summaryText.innerHTML = '<span class="summary-empty">No details yet — tap Edit</span>';
+    var typed = [p.name, p.height, p.weight, p.phone, p.email].some(Boolean);
+    var name = fieldOn('name') ? p.name : '';
+    var bits = [
+      fieldOn('height') ? p.height : '',
+      fieldOn('weight') ? tidy('weight', p.weight) : '',
+      fieldOn('phone') ? tidy('phone', p.phone) : '',
+      fieldOn('email') ? p.email : ''
+    ].filter(Boolean);
+
+    if (!name && !bits.length) {
+      /* Nothing to show is two different situations, and they need
+         different words: nothing entered, or everything switched off. */
+      summaryText.innerHTML = '<span class="summary-empty">' +
+        (typed ? 'Photo only — no details on the image' : 'No details yet — tap Edit') +
+        '</span>';
       return;
     }
     summaryText.innerHTML =
-      '<b>' + esc(p.name || 'No name') + '</b>' +
+      '<b>' + esc(name || 'No name') + '</b>' +
       (bits.length ? '<span class="summary-rest">' + esc(bits.join('  ·  ')) + '</span>' : '');
   }
 
@@ -819,10 +849,15 @@
 
   function updateCreateStatus() {
     var missing = SLOT_DEFS.filter(function (d) { return !state.slots[d.key]; });
+    var many = SLOT_DEFS.length > 1;
     if (!missing.length) {
-      createStatus.innerHTML = '<span class="ok">All four photos in place.</span> Check the details above, then create your sheet.';
-    } else if (missing.length === 4) {
-      createStatus.textContent = 'Add your four photos in step 1 to get started.';
+      createStatus.innerHTML = '<span class="ok">' +
+        (many ? 'All four photos in place.' : 'Photo in place.') +
+        '</span> Check the details above, then create your ' + NOUN + '.';
+    } else if (missing.length === SLOT_DEFS.length) {
+      createStatus.textContent = many
+        ? 'Add your four photos in step 1 to get started.'
+        : 'Add your photo in step 1 to get started.';
     } else {
       createStatus.innerHTML = 'Still missing: <span class="warn">' +
         missing.map(function (d) { return esc(d.label); }).join(', ') +
@@ -842,7 +877,7 @@
     var person = readSheet();
     var missing = SLOT_DEFS.filter(function (d) { return !state.slots[d.key]; });
 
-    if (missing.length === 4) {
+    if (missing.length === SLOT_DEFS.length) {
       alert('Add at least one photo first — step 1.');
       return Promise.resolve(false);
     }
@@ -851,7 +886,8 @@
       '.\nCreate anyway with empty placeholders?')) {
       return Promise.resolve(false);
     }
-    if (!person.name && !confirm('No name entered — the sheet will have no name line. Continue?')) {
+    if (!person.name && fieldOn('name') &&
+        !confirm('No name entered — the ' + NOUN + ' will have no name line. Continue?')) {
       return Promise.resolve(false);
     }
 
@@ -859,7 +895,7 @@
     createBtn.textContent = 'Creating…';
 
     return new Promise(function (resolve) { setTimeout(resolve, 30); })
-      .then(function () { return Composer.toBlob(Composer.compose(state.slots, person)); })
+      .then(function () { return Composer.toBlob(Composer.compose(state.slots, person, LAYOUT.name)); })
       .then(function (blob) {
         if (resultUrl) URL.revokeObjectURL(resultUrl);
         resultBlob = blob;
@@ -867,7 +903,8 @@
         resultImg.src = resultUrl;
 
         var date = new Date().toISOString().slice(0, 10);
-        resultName = 'hair-selfie_' + (slugify(person.name) || 'performer') + '_' + date +
+        resultName = (LAYOUT.name === 'headshot' ? 'headshot_' : 'hair-selfie_') +
+                     (slugify(person.name) || 'performer') + '_' + date +
                      '.' + Composer.fileExtension();
         downloadLink.href = resultUrl;
         downloadLink.download = resultName;
@@ -890,7 +927,7 @@
       })
       .then(function (ok) {
         createBtn.disabled = false;
-        createBtn.textContent = 'Create my Hair Selfie';
+        createBtn.textContent = createLabel;
         return ok;
       });
   }
@@ -914,35 +951,57 @@
 
   /* ── static wiring & init ────────────────────────────────────── */
 
-  function loadPrefs() {
-    var prefs = {};
-    try { prefs = JSON.parse(localStorage.getItem(LS_PREFS)) || {}; } catch (e) { /* ignore */ }
-    var guides = prefs.guides !== false;
-    $('#toggle-guides').checked = guides;
-    grid.classList.toggle('guides-on', guides);
+  function readPrefs() {
+    try { return JSON.parse(localStorage.getItem(LS_PREFS)) || {}; } catch (e) { return {}; }
   }
 
+  function loadPrefs() {
+    var prefs = readPrefs();
+    var guides = prefs.guides !== false;
+    var g = $('#toggle-guides');
+    if (g) g.checked = guides;
+    grid.classList.toggle('guides-on', guides);
+
+    if (toggleBox && prefs.fields) {
+      FIELDS.forEach(function (k) {
+        var el = toggleBox.querySelector('input[data-field="' + k + '"]');
+        if (el && prefs.fields[k] === false) el.checked = false;
+      });
+    }
+  }
+
+  /* Merged, not replaced: the two pages share one store and each only
+     knows about its own controls. */
   function savePrefs() {
-    try {
-      localStorage.setItem(LS_PREFS, JSON.stringify({ guides: $('#toggle-guides').checked }));
-    } catch (e) { /* ignore */ }
+    var prefs = readPrefs();
+    var g = $('#toggle-guides');
+    if (g) prefs.guides = g.checked;
+    if (toggleBox) {
+      prefs.fields = {};
+      FIELDS.forEach(function (k) { prefs.fields[k] = fieldOn(k); });
+    }
+    try { localStorage.setItem(LS_PREFS, JSON.stringify(prefs)); } catch (e) { /* ignore */ }
   }
 
   function wireStatic() {
     $('#add-photos').addEventListener('click', function () {
       pickFiles({
-        multiple: true,
+        /* one position, one photo — there is nothing to arrange */
+        multiple: SLOT_DEFS.length > 1,
         onFiles: function (files) {
-          assignFiles(files, null, autoArrange);
+          assignFiles(files, null, SLOT_DEFS.length > 1 ? autoArrange : null);
         }
       });
     });
     $('#take-photos').addEventListener('click', startCapture);
 
-    $('#toggle-guides').addEventListener('change', function (e) {
-      grid.classList.toggle('guides-on', e.target.checked);
-      savePrefs();
-    });
+    var guidesToggle = $('#toggle-guides');
+    if (guidesToggle) {
+      guidesToggle.addEventListener('change', function (e) {
+        grid.classList.toggle('guides-on', e.target.checked);
+        savePrefs();
+      });
+    }
 
     infoForm.addEventListener('submit', function (e) { e.preventDefault(); });
     infoForm.addEventListener('input', function () {
@@ -964,6 +1023,13 @@
         }
       });
     });
+
+    if (toggleBox) {
+      toggleBox.addEventListener('change', function () {
+        renderSummary();
+        savePrefs();
+      });
+    }
 
     noteInput.addEventListener('input', updateNoteCount);
     updateNoteCount();
@@ -1049,7 +1115,10 @@
     assignFiles: assignFiles,
     swapSlots: swapSlots,
     autoArrange: autoArrange,
-    doCreate: doCreate
+    doCreate: doCreate,
+    layout: LAYOUT,
+    /* the image exactly as Create would build it, without the encode */
+    compose: function () { return Composer.compose(state.slots, readSheet(), LAYOUT.name); }
   };
 
   if (document.readyState === 'loading') {
