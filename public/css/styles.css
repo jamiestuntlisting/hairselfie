@@ -781,40 +781,6 @@ input[type="search"].is-locked {
 .sample-note a { color: var(--muted); }
 
 
-/* ── What goes on the image ──────────────────────────────────────── */
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
-}
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 13px;
-  background: #10131a;
-  border: 1px solid var(--line-soft);
-  border-radius: 999px;
-  font-size: 14.5px;
-  font-weight: 600;
-  color: var(--muted);
-  cursor: pointer;
-  user-select: none;
-}
-/* a chip that is on reads as on at a glance, without needing the box */
-.chip:has(input:checked) { color: var(--text); border-color: var(--line); background: #161b24; }
-.chip input { accent-color: var(--accent); width: 17px; height: 17px; }
-
-.chips-label {
-  display: block;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--muted);
-  margin-top: 14px;
-}
-
 /* ── Link between the two builders ───────────────────────────────── */
 
 .page-link {

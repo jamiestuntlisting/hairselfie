@@ -86,15 +86,6 @@
   var noteCount = $('#note-count');
   var cutBox = $('#f-cut');
   var shaveBox = $('#f-shave');
-  var toggleBox = $('#field-toggles');
-
-  /* A field switched off is simply not on the image. Nothing else changes:
-     the layout closes up around what is left, down to no text at all. */
-  function fieldOn(key) {
-    if (!toggleBox) return true;
-    var el = toggleBox.querySelector('input[data-field="' + key + '"]');
-    return !el || el.checked;
-  }
 
   var cells = {};
   var resultUrl = null;
@@ -759,7 +750,6 @@
   /* Everything printed on the sheet: profile fields, note and flags. */
   function readSheet() {
     var o = readForm();
-    FIELDS.forEach(function (k) { if (!fieldOn(k)) o[k] = ''; });
     o.note = noteInput.value.trim();
     o.canCut = cutBox.checked;
     o.canShave = shaveBox.checked;
@@ -771,25 +761,14 @@
      to summarise yet. */
   function renderSummary() {
     var p = readForm();
-    var typed = [p.name, p.height, p.weight, p.phone, p.email].some(Boolean);
-    var name = fieldOn('name') ? p.name : '';
-    var bits = [
-      fieldOn('height') ? p.height : '',
-      fieldOn('weight') ? tidy('weight', p.weight) : '',
-      fieldOn('phone') ? tidy('phone', p.phone) : '',
-      fieldOn('email') ? p.email : ''
-    ].filter(Boolean);
-
-    if (!name && !bits.length) {
-      /* Nothing to show is two different situations, and they need
-         different words: nothing entered, or everything switched off. */
-      summaryText.innerHTML = '<span class="summary-empty">' +
-        (typed ? 'Photo only — no details on the image' : 'No details yet — tap Edit') +
-        '</span>';
+    var bits = [p.height, tidy('weight', p.weight), tidy('phone', p.phone), p.email]
+      .filter(Boolean);
+    if (!p.name && !bits.length) {
+      summaryText.innerHTML = '<span class="summary-empty">No details yet — tap Edit</span>';
       return;
     }
     summaryText.innerHTML =
-      '<b>' + esc(name || 'No name') + '</b>' +
+      '<b>' + esc(p.name || 'No name') + '</b>' +
       (bits.length ? '<span class="summary-rest">' + esc(bits.join('  ·  ')) + '</span>' : '');
   }
 
@@ -886,7 +865,7 @@
       '.\nCreate anyway with empty placeholders?')) {
       return Promise.resolve(false);
     }
-    if (!person.name && fieldOn('name') &&
+    if (!person.name &&
         !confirm('No name entered — the ' + NOUN + ' will have no name line. Continue?')) {
       return Promise.resolve(false);
     }
@@ -961,25 +940,13 @@
     var g = $('#toggle-guides');
     if (g) g.checked = guides;
     grid.classList.toggle('guides-on', guides);
-
-    if (toggleBox && prefs.fields) {
-      FIELDS.forEach(function (k) {
-        var el = toggleBox.querySelector('input[data-field="' + k + '"]');
-        if (el && prefs.fields[k] === false) el.checked = false;
-      });
-    }
   }
 
-  /* Merged, not replaced: the two pages share one store and each only
-     knows about its own controls. */
+  /* Merged, not replaced: the two pages share one store. */
   function savePrefs() {
     var prefs = readPrefs();
     var g = $('#toggle-guides');
     if (g) prefs.guides = g.checked;
-    if (toggleBox) {
-      prefs.fields = {};
-      FIELDS.forEach(function (k) { prefs.fields[k] = fieldOn(k); });
-    }
     try { localStorage.setItem(LS_PREFS, JSON.stringify(prefs)); } catch (e) { /* ignore */ }
   }
 
@@ -1023,13 +990,6 @@
         }
       });
     });
-
-    if (toggleBox) {
-      toggleBox.addEventListener('change', function () {
-        renderSummary();
-        savePrefs();
-      });
-    }
 
     noteInput.addEventListener('input', updateNoteCount);
     updateNoteCount();
