@@ -97,6 +97,17 @@
   var createLabel = (createBtn && createBtn.textContent.trim()) || 'Create';
 
   /*
+   * What iOS puts in its picker sheet is decided by the accept attribute,
+   * and the image/* wildcard is what adds "Take Photo" to it. The camera
+   * buttons want that; "Add photo" does not, so it names the types instead.
+   *
+   * Naming them pays twice: iOS hands over a JPEG for a HEIC photo when the
+   * accept list has no HEIC in it, and a HEIC is something this app cannot
+   * decode — that is the one file people were losing.
+   */
+  var LIBRARY_TYPES = 'image/jpeg,image/png,image/webp,image/gif';
+
+  /*
    * Always hand the browser a brand-new <input type="file">. Reusing one
    * input (even after clearing .value) is unreliable on mobile Safari — the
    * second pick often never fires 'change', which made "Add photos" look
@@ -105,7 +116,7 @@
   function pickFiles(opts) {
     var input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/*';
+    input.accept = opts.accept || 'image/*';
     if (opts.multiple) input.multiple = true;
     /* 'user' is the selfie camera. Everything here is a photo of yourself,
        so it is always the right one to open; desktop browsers ignore the
@@ -931,6 +942,7 @@
   function wireStatic() {
     $('#add-photos').addEventListener('click', function () {
       pickFiles({
+        accept: LIBRARY_TYPES,          // library only — the camera has its own button
         /* one position, one photo — there is nothing to arrange */
         multiple: SLOT_DEFS.length > 1,
         onFiles: function (files) {
