@@ -48,8 +48,14 @@ window.HairSelfieSheets = (function () {
     var t = token();
     if (!t) return Promise.resolve([]);
     return fetch(PATH, { headers: { Authorization: 'Bearer ' + t } })
-      .then(function (res) { return res.json(); })
-      .then(function (body) { return (body && body.sheets) || []; });
+      .then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (body) {
+          /* A failed listing must not read as an empty one: telling someone
+             with twenty sheets that they have none is worse than an error. */
+          if (!res.ok) throw new Error(body.error || ('Could not list (' + res.status + ')'));
+          return (body && body.sheets) || [];
+        });
+      });
   }
 
   return { save: save, list: list, canSave: canSave };

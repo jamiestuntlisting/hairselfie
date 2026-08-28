@@ -26,7 +26,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    if (url.pathname === SHEETS_PATH || url.pathname.startsWith(SHEETS_PATH + '/')) {
+    if (url.pathname === SHEETS_PATH) {
       return sheets(request, env, url);
     }
 
@@ -107,7 +107,9 @@ function json(body, status, origin) {
  *
  *   33/warren-hull_hair_2026-08-28T15-24-31.jpg
  *
- * — whose, whose name, which kind, and when. Listing a prefix answers
+ * — whose, whose name, which kind, and when. It is read back through
+ * ?key=, not as a path segment, because it contains a slash. Listing a
+ * prefix answers
  * "every sheet Warren has made" without anything else needing to exist.
  * That is why there is no database here. One would start to earn its place
  * the moment somebody wants to search across performers, or to attach a
@@ -142,14 +144,15 @@ async function sheets(request, env, url) {
     return json({ error: 'That session is not valid any more. Sign in again.' }, 401);
   }
 
-  if (request.method === 'POST' && url.pathname === SHEETS_PATH) {
+  if (request.method === 'POST') {
     return save(request, env, url, who);
   }
-  if (request.method === 'GET' && url.pathname === SHEETS_PATH) {
-    return listMine(env, url, who);
-  }
   if (request.method === 'GET') {
-    return one(env, url, who, decodeURIComponent(url.pathname.slice(SHEETS_PATH.length + 1)));
+    /* The key carries a slash, so it travels as a query parameter rather
+       than a path segment: %2F inside a path is handled differently by
+       everything it passes through, and there is no reason to find out. */
+    const key = url.searchParams.get('key');
+    return key ? one(env, url, who, key) : listMine(env, url, who);
   }
   return json({ error: 'Not something this endpoint does.' }, 405);
 }

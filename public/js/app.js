@@ -853,7 +853,8 @@
       return;
     }
     if (name && !failed) {
-      chip.innerHTML = 'Signed in as <b>' + esc(name) + '</b> ' +
+      /* the name is the way to everything you have made */
+      chip.innerHTML = 'Signed in as <a class="chip-link" href="saved.html">' + esc(name) + '</a> ' +
         '<button type="button" class="chip-link" id="sign-out">Sign out</button>';
       chip.querySelector('#sign-out').addEventListener('click', signOut);
       return;
