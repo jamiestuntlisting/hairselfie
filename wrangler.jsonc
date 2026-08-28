@@ -26,6 +26,14 @@
    * by prefix, so "every sheet belonging to user 33" is a listing, not a
    * query. See src/worker.js.
    */
+  /*
+   * Who can see the admin page. Checked against the email on the signed-in
+   * profile, server-side — the same list the rate calculator uses.
+   */
+  "vars": {
+    "ADMIN_EMAILS": "james.northrup@gmail.com,jamie@stuntlisting.com,warrenhullstunts@gmail.com,warren.hull.stunts@gmail.com,warren@stuntlisting.com,greg@stuntlisting.com,info@stuntlisting.com,thestuntassistant@gmail.com,derric@stuntlisting.com"
+  },
+
   "r2_buckets": [
     { "binding": "SHEETS", "bucket_name": "hairselfie-sheets" }
   ]

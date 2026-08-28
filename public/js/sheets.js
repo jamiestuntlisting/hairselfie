@@ -58,5 +58,28 @@ window.HairSelfieSheets = (function () {
       });
   }
 
-  return { save: save, list: list, canSave: canSave };
+  /*
+   * Mark today. Saved sheets show who is making things; this shows who
+   * turned up at all, which is the half that says whether anyone is using
+   * it. Once a day per browser — the Worker overwrites the day's mark
+   * anyway, and there is no reason to ask it to.
+   */
+  function markSeen() {
+    var t = token();
+    if (!t) return Promise.resolve(false);
+    var day = new Date().toISOString().slice(0, 10);
+    try {
+      if (localStorage.getItem('hairselfie.seen') === day) return Promise.resolve(false);
+    } catch (e) { /* no storage: mark every load, which is still bounded */ }
+
+    return fetch('/api/seen', { method: 'POST', headers: { Authorization: 'Bearer ' + t } })
+      .then(function (res) {
+        if (!res.ok) return false;
+        try { localStorage.setItem('hairselfie.seen', day); } catch (e) { /* ignore */ }
+        return true;
+      })
+      .catch(function () { return false; });   // never worth interrupting anyone over
+  }
+
+  return { save: save, list: list, canSave: canSave, markSeen: markSeen };
 })();

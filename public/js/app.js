@@ -1199,6 +1199,7 @@
 
     Api.getSession().then(function (session) {
       state.me = session.user || {};
+      if (window.HairSelfieSheets) HairSelfieSheets.markSeen();
       fillForm(state.me);
       applyShaveQuestion(state.me);
       renderSessionChip();

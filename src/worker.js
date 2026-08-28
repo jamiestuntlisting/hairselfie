@@ -20,6 +20,9 @@
 const UPSTREAM = 'https://api.stuntlisting.com/graphql';
 const PROXY_PATH = '/api/graphql';
 const SHEETS_PATH = '/api/sheets';
+const SEEN_PATH = '/api/seen';
+const ADMIN_PATH = '/api/admin';
+const SEEN_PREFIX = '_seen/';
 const MAX_SHEET = 12 * 1024 * 1024;   // a sheet is under 1 MB; this is a ceiling, not a target
 
 export default {
@@ -28,6 +31,12 @@ export default {
 
     if (url.pathname === SHEETS_PATH) {
       return sheets(request, env, url);
+    }
+    if (url.pathname === SEEN_PATH) {
+      return seen(request, env, url);
+    }
+    if (url.pathname === ADMIN_PATH) {
+      return admin(request, env, url);
     }
 
     if (url.pathname !== PROXY_PATH) {
@@ -165,7 +174,7 @@ async function whoIs(auth) {
     body: JSON.stringify({
       operationName: 'getMyProfile',
       variables: {},
-      query: 'query getMyProfile { getMyProfile { id first_name last_name } }'
+      query: 'query getMyProfile { getMyProfile { id first_name last_name email } }'
     })
   });
   const body = await res.json();
@@ -173,7 +182,8 @@ async function whoIs(auth) {
   if (!me || me.id == null) return null;
   return {
     id: String(me.id),
-    name: [me.first_name, me.last_name].filter(Boolean).join(' ').trim()
+    name: [me.first_name, me.last_name].filter(Boolean).join(' ').trim(),
+    email: String(me.email || '').toLowerCase().trim()
   };
 }
 
@@ -237,4 +247,131 @@ async function one(env, url, who, key) {
     (object.httpMetadata && object.httpMetadata.contentType) || 'image/jpeg');
   headers.set('Cache-Control', 'private, max-age=60');
   return new Response(object.body, { status: 200, headers });
+}
+
+
+/* ── who is using it ────────────────────────────────────────────────
+ *
+ * Saved sheets say who is making things. They say nothing about who signed
+ * in and made nothing, which is the more interesting half of "is anyone
+ * using this". So the app marks a day when somebody arrives signed in.
+ *
+ * One object per person per day, overwritten:
+ *
+ *   _seen/2026-08-28/33.json
+ *
+ * That bounds the writes to one a day each however often somebody opens
+ * the page, and a listing of the prefix is the day's active people. Day
+ * granularity is all "are people logging in" needs, and the alternative —
+ * a row per visit — is a database, which nothing here yet justifies.
+ */
+
+async function seen(request, env, url) {
+  if (!env.SHEETS) return json({ error: 'Not configured.' }, 501);
+  const origin = request.headers.get('Origin');
+  if (origin && origin !== url.origin) return json({ error: 'Wrong origin.' }, 403);
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders(url.origin) });
+  }
+  if (request.method !== 'POST') return json({ error: 'POST only.' }, 405);
+
+  const auth = request.headers.get('Authorization');
+  if (!auth) return json({ error: 'Not signed in.' }, 401);
+
+  let who;
+  try { who = await whoIs(auth); } catch (err) { return json({ error: err.message }, 502); }
+  if (!who) return json({ error: 'Not a valid session.' }, 401);
+
+  const day = new Date().toISOString().slice(0, 10);
+  await env.SHEETS.put(`${SEEN_PREFIX}${day}/${who.id}.json`,
+    JSON.stringify({ id: who.id, name: who.name, email: who.email, at: new Date().toISOString() }),
+    { httpMetadata: { contentType: 'application/json' },
+      customMetadata: { userId: who.id, name: who.name } });
+
+  return json({ ok: true }, 200, url.origin);
+}
+
+/* ── the admin view ─────────────────────────────────────────────────
+ *
+ * Everything saved and everyone seen, for the handful of people who run
+ * StuntListing. Being an admin is decided here from the email on the
+ * token's profile, never from anything the browser says.
+ */
+
+function adminEmails(env) {
+  const raw = (env && env.ADMIN_EMAILS) || '';
+  return String(raw).split(',').map((e) => e.toLowerCase().trim()).filter(Boolean);
+}
+
+async function everything(bucket, prefix) {
+  const out = [];
+  let cursor;
+  /* bounded rather than unbounded: five pages is more history than this
+     page can usefully show, and an admin view should not be able to spend
+     the whole request budget */
+  for (let page = 0; page < 5; page++) {
+    const chunk = await bucket.list({ prefix, limit: 1000, cursor });
+    out.push(...chunk.objects);
+    if (!chunk.truncated) return { objects: out, complete: true };
+    cursor = chunk.cursor;
+  }
+  return { objects: out, complete: false };
+}
+
+async function admin(request, env, url) {
+  if (!env.SHEETS) return json({ error: 'Not configured.' }, 501);
+  const origin = request.headers.get('Origin');
+  if (origin && origin !== url.origin) return json({ error: 'Wrong origin.' }, 403);
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: corsHeaders(url.origin) });
+  }
+
+  const auth = request.headers.get('Authorization');
+  if (!auth) return json({ error: 'Sign in to see this.' }, 401);
+
+  let who;
+  try { who = await whoIs(auth); } catch (err) { return json({ error: err.message }, 502); }
+  if (!who) return json({ error: 'That session is not valid any more.' }, 401);
+
+  const allowed = adminEmails(env);
+  if (!who.email || allowed.indexOf(who.email) === -1) {
+    return json({ error: 'This page is for StuntListing admins.' }, 403);
+  }
+
+  const [saved, visits] = await Promise.all([
+    everything(env.SHEETS, ''),
+    everything(env.SHEETS, SEEN_PREFIX)
+  ]);
+
+  const sheetsOut = saved.objects
+    .filter((o) => o.key.indexOf(SEEN_PREFIX) !== 0)
+    .map((o) => {
+      const meta = o.customMetadata || {};
+      return {
+        key: o.key,
+        userId: meta.userId || o.key.split('/')[0],
+        name: meta.name || '',
+        kind: meta.kind || '',
+        size: o.size,
+        createdAt: meta.createdAt || o.uploaded
+      };
+    })
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+
+  const seenOut = visits.objects.map((o) => {
+    const meta = o.customMetadata || {};
+    const parts = o.key.slice(SEEN_PREFIX.length).split('/');
+    return {
+      date: parts[0],
+      userId: meta.userId || (parts[1] || '').replace(/\.json$/, ''),
+      name: meta.name || ''
+    };
+  }).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+
+  return json({
+    sheets: sheetsOut,
+    seen: seenOut,
+    complete: saved.complete && visits.complete,
+    you: who.name
+  }, 200, url.origin);
 }
