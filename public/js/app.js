@@ -202,6 +202,17 @@
 
     root.addEventListener('pointerdown', function (e) { beginPointer(key, e); });
 
+    /*
+     * An empty spot opens the camera from a click, not from the pointerdown
+     * that starts a drag. iOS only honours input.click() inside a real
+     * click — which is why "Add photos" worked on a phone while tapping a
+     * spot did nothing, though both call the same picker.
+     */
+    root.addEventListener('click', function (e) {
+      if (e.target.closest && e.target.closest('button[data-act]')) return;
+      if (!state.slots[key]) cellClicked(key);
+    });
+
     root.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cellClicked(key); }
     });
@@ -237,7 +248,8 @@
   function beginPointer(key, e) {
     if (e.button != null && e.button > 0) return;
     if (e.target.closest && e.target.closest('button[data-act]')) return;
-    if (!state.slots[key]) { pendPick(key); return; }
+    /* nothing to drag out of an empty spot — the click handler has it */
+    if (!state.slots[key]) return;
 
     var isTouch = e.pointerType === 'touch' || e.pointerType === 'pen';
     drag = {
