@@ -28,8 +28,21 @@ window.Composer = (function () {
     { key: 'front', label: 'Headshot', outline: 'front', mirror: false, facing: '' }
   ];
 
+  /*
+   * Wardrobe is the same four angles as hair, with a standing figure to
+   * frame against instead of a head — and a taller cell, because a whole
+   * person in a 4:5 frame is mostly empty air either side.
+   */
+  var WARDROBE_DEFS = [
+    { key: 'front', label: 'Front',      outline: 'body', mirror: false, facing: '' },
+    { key: 'left',  label: 'Left side',  outline: 'body', mirror: false, facing: 'left side to camera' },
+    { key: 'right', label: 'Right side', outline: 'body', mirror: true,  facing: 'right side to camera' },
+    { key: 'back',  label: 'Back',       outline: 'body', mirror: false, facing: '' }
+  ];
+
   var LAYOUTS = {
     sheet:    { cols: 2, rows: 2, cellWidth: 1000, cellHeight: 1250, defs: SLOT_DEFS },
+    wardrobe: { cols: 2, rows: 2, cellWidth: 1000, cellHeight: 1500, defs: WARDROBE_DEFS },
     headshot: { cols: 1, rows: 1, cellWidth: 1600, cellHeight: 2000, defs: HEADSHOT_DEFS }
   };
 
@@ -37,7 +50,7 @@ window.Composer = (function () {
   function layoutFor(name) {
     var base = LAYOUTS[name] || LAYOUTS.sheet;
     var out = (window.HAIRSELFIE_CONFIG && window.HAIRSELFIE_CONFIG.output) || {};
-    var over = (name === 'headshot' ? out.headshot : out) || {};
+    var over = (LAYOUTS[name] && name !== 'sheet' ? out[name] : out) || {};
     return {
       name: LAYOUTS[name] ? name : 'sheet',
       cols: base.cols,

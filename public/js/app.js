@@ -14,6 +14,10 @@
      from it. <body data-layout="headshot"> is the only difference. */
   var LAYOUT = Composer.layoutFor(document.body.dataset.layout || 'sheet');
   var NOUN = LAYOUT.name === 'headshot' ? 'headshot' : 'sheet';
+
+  /* what the saved file is called — one per layout, so a wardrobe sheet
+     does not land in the camera roll named after somebody's hair */
+  var FILE_PREFIX = { sheet: 'hair-selfie', wardrobe: 'wardrobe', headshot: 'headshot' };
   var SLOT_DEFS = LAYOUT.defs;
   var SLOT_KEYS = SLOT_DEFS.map(function (d) { return d.key; });
   var defByKey = {};
@@ -891,7 +895,7 @@
         resultImg.src = resultUrl;
 
         var date = new Date().toISOString().slice(0, 10);
-        resultName = (LAYOUT.name === 'headshot' ? 'headshot_' : 'hair-selfie_') +
+        resultName = (FILE_PREFIX[LAYOUT.name] || 'hair-selfie') + '_' +
                      (slugify(person.name) || 'performer') + '_' + date +
                      '.' + Composer.fileExtension();
         downloadLink.href = resultUrl;
@@ -1036,6 +1040,11 @@
   }
 
   function init() {
+    /* Every frame that shows a photo — the grid cells, the adjust stage,
+       the tripod preview — takes its shape from the layout, so a wardrobe
+       photo is framed the same way it will be printed. */
+    document.documentElement.style.setProperty(
+      '--cell-aspect', LAYOUT.cellWidth + ' / ' + LAYOUT.cellHeight);
     buildGrid();
     wireStatic();
     wireAdjust();

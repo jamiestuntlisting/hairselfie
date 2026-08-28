@@ -204,7 +204,8 @@ input:focus-visible, select:focus-visible, .btn:focus-visible {
 
 .cell {
   position: relative;
-  aspect-ratio: 4 / 5;
+  /* set from the layout: 4:5 for a head, 2:3 for a whole person */
+  aspect-ratio: var(--cell-aspect, 4 / 5);
   background: #0a0b0e;
   border: 1.5px dashed #3a3f4b;
   border-radius: 12px;
@@ -234,6 +235,30 @@ input:focus-visible, select:focus-visible, .btn:focus-visible {
   text-align: center;
 }
 .cell-empty svg { grid-area: 1 / 1; }
+
+/*
+ * The caption gets something to sit on. A standing figure runs to the
+ * floor of the cell and the enlarged head guide reaches its shoulders
+ * down there, so in both cases the words would otherwise be read through
+ * the guide.
+ */
+.cell-empty::before {
+  content: '';
+  grid-area: 1 / 1;
+  align-self: end;
+  justify-self: stretch;
+  width: 100%;
+  height: 4.4em;
+  margin: 0 -8px -8px;
+  background: linear-gradient(rgba(10, 11, 14, 0), rgba(10, 11, 14, 0.94) 55%);
+  border-radius: 0 0 11px 11px;
+  /* between the guide and the words: a ::before is the first child, so
+     without this the guide would draw straight over it */
+  position: relative;
+  z-index: 1;
+}
+.cell-empty svg { position: relative; z-index: 0; }
+.cell-empty span { position: relative; z-index: 2; }
 .cell-empty .cell-name,
 .cell-empty .cell-facing,
 .cell-empty .cell-cta { grid-area: 1 / 1; }
@@ -478,7 +503,7 @@ input:focus-visible, select:focus-visible, .btn:focus-visible {
 .adjust-stage {
   position: relative;
   width: 100%;
-  aspect-ratio: 4 / 5;
+  aspect-ratio: var(--cell-aspect, 4 / 5);
   border-radius: 12px;
   overflow: hidden;
   background: #000;
@@ -753,18 +778,32 @@ input[type="search"].is-locked {
 .sample-note a { color: var(--muted); }
 
 
-/* ── Link between the two builders ───────────────────────────────── */
+/* ── Which kind of selfie ────────────────────────────────────────── */
 
-.page-link {
-  display: block;
+.tabs {
+  display: flex;
+  gap: 6px;
   max-width: 900px;
-  margin: 4px auto 22px;
-  padding: 0 18px;
-  color: var(--muted);
-  font-size: 14px;
-  text-align: center;
+  margin: 0 auto;
+  padding: 10px 18px 0;
 }
-.page-link a { color: #9fb4d8; font-weight: 600; }
+.tab {
+  flex: 1 1 0;
+  padding: 11px 8px;
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  border-radius: 11px;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  text-decoration: none;
+}
+.tab[aria-current="page"] {
+  background: #1d1408;
+  border-color: var(--accent);
+  color: #fff;
+}
 
 
 /* ── Tripod mode (beta) ──────────────────────────────────────────── */
@@ -815,7 +854,7 @@ body.tripod-open { overflow: hidden; }
 
 .tripod-stage {
   position: relative;
-  aspect-ratio: 4 / 5;
+  aspect-ratio: var(--cell-aspect, 4 / 5);
   background: #000;
   border-radius: 12px;
   overflow: hidden;

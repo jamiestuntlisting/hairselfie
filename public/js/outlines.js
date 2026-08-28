@@ -24,6 +24,14 @@ window.Outlines = (function () {
 
   var VIEWBOX = '0 0 400 500';
 
+  /*
+   * The head guides are drawn a little larger than the box they were laid
+   * out in, so the head fills more of the photo. The shoulders run off the
+   * sides and the bottom at this scale, which is what they do in a real
+   * head-and-shoulders shot anyway.
+   */
+  var HEAD_GROW = 1.18;
+
   var FRONT_PATH = [
     // cranium
     'M200 62 C 255 62 300 112 300 180 C 300 262 255 332 200 332',
@@ -61,16 +69,76 @@ window.Outlines = (function () {
     'M208 190 C 226 184 238 204 228 226 C 221 240 209 243 203 236'
   ].join(' ');
 
+  /*
+   * A standing figure for wardrobe, in a 2:3 box — a full body does not
+   * belong in the 4:5 frame a head does. Head about an eighth of the
+   * height, feet just off the bottom, so someone matching it is standing
+   * far enough back to show the whole outfit.
+   */
+  var BODY_VIEWBOX = '0 0 400 600';
+
+  var BODY_PATH = [
+    // head
+    'M200 26 C 226 26 247 50 247 82 C 247 114 226 138 200 138',
+    'C 174 138 153 114 153 82 C 153 50 174 26 200 26 Z',
+    // neck
+    'M183 136 C 183 148 182 157 180 163',
+    'M217 136 C 217 148 218 157 220 163',
+    // shoulders and outer arms, down to the hands
+    'M180 163 C 152 170 130 183 120 202 C 110 224 106 262 104 302',
+    'C 102 332 103 352 106 374',
+    'M220 163 C 248 170 270 183 280 202 C 290 224 294 262 296 302',
+    'C 298 332 297 352 294 374',
+    // hands
+    'M106 374 C 99 383 100 396 109 399 C 118 402 125 395 124 385',
+    'M294 374 C 301 383 300 396 291 399 C 282 402 275 395 276 385',
+    // torso: under the arm, in to the waist, out to the hip
+    'M136 200 C 130 240 127 268 129 300 C 131 322 133 336 137 352',
+    'M264 200 C 270 240 273 268 271 300 C 269 322 267 336 263 352',
+    // outer legs
+    'M137 352 C 132 404 130 462 132 520 C 133 546 133 562 132 576',
+    'M263 352 C 268 404 270 462 268 520 C 267 546 267 562 268 576',
+    // inner legs, from the crotch down
+    'M200 366 C 196 420 193 480 191 522 C 190 548 190 562 191 576',
+    'M200 366 C 204 420 207 480 209 522 C 210 548 210 562 209 576',
+    // feet
+    'M132 576 C 121 580 113 584 113 588 L 191 588',
+    'M268 576 C 279 580 287 584 287 588 L 209 588'
+  ].join(' ');
+
+  /* Declared after the paths they name, so nothing here is undefined. */
+  var KINDS = {
+    front:   { path: FRONT_PATH,   box: VIEWBOX,      grow: HEAD_GROW, about: [200, 62] },
+    profile: { path: PROFILE_PATH, box: VIEWBOX,      grow: HEAD_GROW, about: [200, 62] },
+    body:    { path: BODY_PATH,    box: BODY_VIEWBOX, grow: 1,         about: [200, 300] }
+  };
+
+  function kindFor(kind) {
+    return KINDS[kind] || KINDS.front;
+  }
+
+  function boxWidth(box) {
+    return parseFloat(box.split(/\s+/)[2]) || 400;
+  }
+
   function pathFor(kind) {
-    return kind === 'profile' ? PROFILE_PATH : FRONT_PATH;
+    return kindFor(kind).path;
   }
 
   /* Inline SVG markup for a guide. mirror=true flips it horizontally. */
   function svgMarkup(kind, mirror) {
-    var transform = mirror ? ' transform="translate(400 0) scale(-1 1)"' : '';
+    var k = kindFor(kind);
+    var parts = [];
+    if (mirror) parts.push('translate(' + boxWidth(k.box) + ' 0) scale(-1 1)');
+    if (k.grow !== 1) {
+      parts.push('translate(' + k.about[0] + ' ' + k.about[1] + ')');
+      parts.push('scale(' + k.grow + ')');
+      parts.push('translate(' + (-k.about[0]) + ' ' + (-k.about[1]) + ')');
+    }
+    var transform = parts.length ? ' transform="' + parts.join(' ') + '"' : '';
     return (
-      '<svg viewBox="' + VIEWBOX + '" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
-      '<path d="' + pathFor(kind) + '"' + transform +
+      '<svg viewBox="' + k.box + '" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+      '<path d="' + k.path + '"' + transform +
       ' fill="none" stroke="currentColor" stroke-width="6"' +
       ' stroke-dasharray="13 15" stroke-linecap="round" stroke-linejoin="round"/>' +
       '</svg>'
@@ -80,7 +148,9 @@ window.Outlines = (function () {
   return {
     VIEW_W: 400,
     VIEW_H: 500,
+    HEAD_GROW: HEAD_GROW,
     pathFor: pathFor,
+    kindFor: kindFor,
     svgMarkup: svgMarkup
   };
 })();
