@@ -249,6 +249,29 @@ window.HairSelfieApi = (function () {
     });
   }
 
+  /*
+   * Everything a sheet can use, plus the gender fields, which are a guess —
+   * that part of the schema has never been read from here. Unknown ones are
+   * dropped on the first call rather than breaking the query.
+   */
+  var PROFILE_FIELDS = ['id', 'user_id', 'first_name', 'last_name', 'alias', 'nickname',
+                        'height', 'weight', 'phone_number', 'phone_number_formatted',
+                        'email', 'hair_color', 'role',
+                        'gender', 'sex', 'gender_identity', 'pronouns'];
+
+  /*
+   * Whether to offer "able to shave". Only a clear yes hides it: an unknown
+   * or unrecognised value leaves the question there, because wrongly
+   * dropping it is the worse failure of the two.
+   */
+  function identifiesAsWoman(person) {
+    var said = [person && person.gender, person && person.pronouns]
+      .filter(Boolean).join(' ').toLowerCase();
+    if (!said) return false;
+    if (/\b(non[- ]?binary|nb|genderqueer|they|them)\b/.test(said)) return false;
+    return /\b(f|female|woman|women|she|her|hers|fem)\b/.test(said);
+  }
+
   function toPerson(u) {
     if (!u) return {};
     var full = [u.first_name, u.last_name].filter(Boolean).join(' ').trim();
@@ -261,7 +284,9 @@ window.HairSelfieApi = (function () {
       weight: u.weight || '',
       phone: u.phone_number_formatted || u.phone_number || '',
       email: u.email || '',
-      hairColor: u.hair_color || ''
+      hairColor: u.hair_color || '',
+      gender: u.gender || u.sex || u.gender_identity || '',
+      pronouns: u.pronouns || ''
     };
   }
 
@@ -288,16 +313,41 @@ window.HairSelfieApi = (function () {
 
     getSession: function () {
       var GQL = window.StuntListingGQL;
+      var R = window.StuntListingResolve;
       if (!GQL.isSignedIn()) {
         return Promise.resolve({ user: {}, coordinator: false, signedOut: true });
       }
-      return GQL.request(GQL.QUERIES.me).then(function (data) {
-        var me = (data && data.getMyProfile) || {};
+
+      function shape(me) {
         return {
           user: toPerson(me),
           coordinator: roleIsCoordinator(me.role),
           role: me.role || ''
         };
+      }
+
+      /*
+       * Asks for more than the confirmed fields — the gender ones have
+       * never been seen in this schema — and lets resolveRows drop
+       * whichever do not exist. The survivors are remembered, so this costs
+       * one extra round trip once and nothing after that.
+       *
+       * If any of it goes wrong the plain confirmed query still runs:
+       * signing in must not depend on a field nobody has verified.
+       */
+      return R.resolveRows({
+        cacheKey: 'myProfileFields',
+        field: 'getMyProfile',
+        arg: null,
+        fields: PROFILE_FIELDS,
+        opName: 'getMyProfile',
+        request: GQL.request
+      }).then(function (found) {
+        return shape(rowsAt(found.data, 'getMyProfile', found.path)[0] || {});
+      }).catch(function () {
+        return GQL.request(GQL.QUERIES.me).then(function (data) {
+          return shape((data && data.getMyProfile) || {});
+        });
       });
     },
 
@@ -434,5 +484,6 @@ window.HairSelfieApi = (function () {
   /* pure helpers, exposed for tests */
   impl.toPerson = toPerson;
   impl.roleIsCoordinator = roleIsCoordinator;
+  impl.identifiesAsWoman = identifiesAsWoman;
   return impl;
 })();

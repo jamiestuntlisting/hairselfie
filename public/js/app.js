@@ -745,7 +745,22 @@
   function tidy(key, value) {
     if (key === 'phone' && Fmt.phone) return Fmt.phone(value);
     if (key === 'weight' && Fmt.weight) return Fmt.weight(value);
+    if (key === 'height' && Fmt.height) return Fmt.height(value);
     return value == null ? '' : value;
+  }
+
+  /*
+   * "Able to shave" is not a question to put to everyone. It is hidden for
+   * anyone whose profile says they are a woman, and left alone otherwise —
+   * an unknown or unrecognised value keeps the question, since dropping it
+   * from somebody's sheet by mistake is the worse way to be wrong.
+   */
+  function applyShaveQuestion(person) {
+    if (!shaveBox) return;
+    var hide = !!(Api.identifiesAsWoman && Api.identifiesAsWoman(person || {}));
+    var label = shaveBox.closest ? shaveBox.closest('label') : null;
+    if (label) label.hidden = hide;
+    if (hide) shaveBox.checked = false;
   }
 
   function fillForm(p) {
@@ -775,8 +790,8 @@
      to summarise yet. */
   function renderSummary() {
     var p = readForm();
-    var bits = [p.height, tidy('weight', p.weight), tidy('phone', p.phone), p.email]
-      .filter(Boolean);
+    var bits = [tidy('height', p.height), tidy('weight', p.weight),
+                tidy('phone', p.phone), p.email].filter(Boolean);
     if (!p.name && !bits.length) {
       summaryText.innerHTML = '<span class="summary-empty">No details yet — tap Edit</span>';
       return;
@@ -868,7 +883,10 @@
   function signOut() {
     if (Api.signOut) Api.signOut();
     state.me = {};
-    if (!state.requestFor) fillForm({});
+    if (!state.requestFor) {
+      fillForm({});
+      applyShaveQuestion({});
+    }
     renderSessionChip();
     renderSummary();
   }
@@ -879,6 +897,7 @@
       if (!state.requestFor) {
         fillForm(state.me);
         renderSummary();
+        applyShaveQuestion(state.me);
       }
       renderSessionChip();
     }).catch(function () {
@@ -902,6 +921,7 @@
   function enterRequestMode(performer) {
     state.requestFor = performer;
     fillForm(performer);
+    applyShaveQuestion(performer);
     setDetailsOpen(false);
 
     var banner = $('#request-banner');
@@ -1067,7 +1087,7 @@
       persistProfile();
     });
     /* tidy up on the way out of the field, never mid-keystroke */
-    ['phone', 'weight'].forEach(function (k) {
+    ['phone', 'weight', 'height'].forEach(function (k) {
       var el = infoForm.elements[k];
       el.addEventListener('change', function () {
         var next = tidy(k, el.value.trim());
@@ -1137,6 +1157,7 @@
     Api.getSession().then(function (session) {
       state.me = session.user || {};
       fillForm(state.me);
+      applyShaveQuestion(state.me);
       renderSessionChip();
       setDetailsOpen(!state.me.name);
     }).catch(function (err) {

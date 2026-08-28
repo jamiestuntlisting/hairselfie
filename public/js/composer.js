@@ -298,6 +298,7 @@ window.Composer = (function () {
       var v = ((person && person[k]) || '').trim();
       if (k === 'weight' && fmt.weight) return fmt.weight(v);
       if (k === 'phone' && fmt.phone) return fmt.phone(v);
+      if (k === 'height' && fmt.height) return fmt.height(v);
       return v;
     }).filter(Boolean);
 

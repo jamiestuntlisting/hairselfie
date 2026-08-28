@@ -73,5 +73,29 @@ window.HairSelfieFormat = (function () {
     return stripped + (kg ? ' kg' : ' lbs');
   }
 
-  return { phone: phone, weight: weight };
+  /*
+   * The user table stores height as a plain number of inches, which is no
+   * use on a sheet somebody reads across a room. 65 becomes 5'5".
+   *
+   * Only a bare number in the range a person could be is converted. A value
+   * that already carries feet and inches is left as it is, and so is
+   * anything metric — converting that would be guessing at what the person
+   * meant to say.
+   */
+  function height(value) {
+    var raw = String(value == null ? '' : value).trim();
+    if (!raw) return '';
+    if (/['"\u2032\u2033]/.test(raw)) return raw;        // already feet and inches
+    if (/\bcm\b|\bm\b|centim|met(er|re)/i.test(raw)) return raw;   // metric
+
+    var m = raw.match(/^(\d{2,3})\s*(?:in|ins|inch|inches)?$/i);
+    if (!m) return raw;
+    var inches = parseInt(m[1], 10);
+    /* 3 foot to 8 foot: outside that it is not a height in inches, whatever
+       else it might be */
+    if (inches < 36 || inches > 96) return raw;
+    return Math.floor(inches / 12) + "'" + (inches % 12) + '"';
+  }
+
+  return { phone: phone, weight: weight, height: height };
 })();
