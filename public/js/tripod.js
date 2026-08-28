@@ -89,8 +89,10 @@ window.HairSelfieTripod = (function () {
 
   var VOICE_KEY = 'hairselfie.tripod.voice';
 
+  /* Off unless asked for: the ticks and the shutter already carry the
+     timing, and a phone that starts talking is a surprise. */
   function voiceOn() {
-    try { return localStorage.getItem(VOICE_KEY) !== 'off'; } catch (e) { return true; }
+    try { return localStorage.getItem(VOICE_KEY) === 'on'; } catch (e) { return false; }
   }
 
   function setVoice(on) {
@@ -145,7 +147,7 @@ window.HairSelfieTripod = (function () {
           '<button type="button" class="btn btn-primary btn-big" data-act="use" hidden>Use these photos</button>' +
           '<button type="button" class="btn btn-primary btn-big" data-act="start">Start</button>' +
         '</div>' +
-        '<label class="tripod-voice"><input type="checkbox" data-act="voice" checked> ' +
+        '<label class="tripod-voice"><input type="checkbox" data-act="voice"> ' +
           'Say each one out loud</label>' +
         '<div class="tripod-strip"></div>' +
       '</div>';
