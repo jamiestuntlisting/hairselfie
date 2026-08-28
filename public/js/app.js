@@ -805,10 +805,85 @@
     }
   }, 350);
 
+  /*
+   * The chip is also the way in and out of a session. Signed in it offers
+   * to sign out; signed out it offers to sign in, which is what people were
+   * tapping it expecting anyway.
+   */
   function renderSessionChip(failed) {
     var chip = $('#session-chip');
-    if (failed) { chip.textContent = 'Not signed in'; return; }
-    chip.innerHTML = 'Signed in as <b>' + esc(state.me.name || 'Guest') + '</b>';
+    var name = state.me && state.me.name;
+    /* Sample data is not a session, so it does not offer to end one. */
+    if (Api.isDemo) {
+      chip.innerHTML = 'Sample data · <button type="button" class="chip-link" id="sign-in">' +
+        'Sign in</button>';
+      chip.querySelector('#sign-in').addEventListener('click', signIn);
+      return;
+    }
+    if (name && !failed) {
+      chip.innerHTML = 'Signed in as <b>' + esc(name) + '</b> ' +
+        '<button type="button" class="chip-link" id="sign-out">Sign out</button>';
+      chip.querySelector('#sign-out').addEventListener('click', signOut);
+      return;
+    }
+    chip.innerHTML = '<button type="button" class="chip-link chip-link-lead" id="sign-in">' +
+      'Sign in</button>';
+    chip.querySelector('#sign-in').addEventListener('click', signIn);
+  }
+
+  function signIn() {
+    if (!window.HairSelfieSignIn) return;
+    var hasPhotos = SLOT_KEYS.some(function (k) { return state.slots[k]; });
+    HairSelfieSignIn.open().then(function (result) {
+      if (!result) return;
+      /* Switching off the sample data means reloading, because which
+         backend the app talks to is settled when it starts. Nothing is
+         lost unless there are photos already, and then it asks first. */
+      if (result.switched) {
+        if (!hasPhotos || confirm(
+            'Signing in reloads this page, and the photos you have added will be cleared. Continue?')) {
+          reloadLive();
+        }
+        return;
+      }
+      refreshSession();
+    });
+  }
+
+  /*
+   * ?api=demo pins the sample data on every load, so reloading with it
+   * still in the address bar would land straight back on the thing the
+   * person just signed out of. Signing in settles that argument.
+   */
+  function reloadLive() {
+    try {
+      var url = new URL(window.location.href);
+      url.searchParams.delete('api');
+      window.location.replace(url.toString());
+    } catch (e) {
+      window.location.reload();
+    }
+  }
+
+  function signOut() {
+    if (Api.signOut) Api.signOut();
+    state.me = {};
+    if (!state.requestFor) fillForm({});
+    renderSessionChip();
+    renderSummary();
+  }
+
+  function refreshSession() {
+    return Api.getSession().then(function (session) {
+      state.me = session.user || {};
+      if (!state.requestFor) {
+        fillForm(state.me);
+        renderSummary();
+      }
+      renderSessionChip();
+    }).catch(function () {
+      renderSessionChip(true);
+    });
   }
 
   /* ── request links ───────────────────────────────────────────── */

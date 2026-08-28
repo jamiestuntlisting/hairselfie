@@ -45,7 +45,7 @@ img, canvas, svg { display: block; }
 .brand { display: flex; align-items: center; gap: 12px; }
 .brand-mark { width: 42px; height: 42px; border-radius: 11px; }
 .brand h1 { margin: 0; font-size: 20px; letter-spacing: 0.4px; }
-.tagline { margin: 1px 0 0; font-size: 12px; color: var(--muted); }
+.tagline { margin: 1px 0 0; font-size: 12px; color: var(--muted); white-space: nowrap; }
 
 .session-chip {
   font-size: 12.5px;
@@ -162,13 +162,14 @@ main {
 .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
 
 
+/* stacked and full width: these are the two ways into the whole tool, and
+   on a phone a pair of half-width buttons is a pair of small targets */
 .photo-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px 18px;
+  display: grid;
+  gap: 9px;
   margin: 4px 0 2px;
 }
+.photo-actions .btn { width: 100%; padding: 13px 18px; font-size: 15.5px; }
 
 input[type="text"], input[type="tel"], input[type="email"], input[type="search"] {
   width: 100%;
@@ -1027,14 +1028,32 @@ body.tripod-open { overflow: hidden; }
 
 .tripod-actions { margin-top: 12px; display: grid; gap: 8px; }
 
-.tripod-voice {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin-top: 11px;
-  font-size: 14px;
-  color: var(--muted);
+
+
+/* ── Signing in ──────────────────────────────────────────────────── */
+
+.chip-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: #9fb4d8;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
   cursor: pointer;
-  user-select: none;
 }
-.tripod-voice input { accent-color: var(--accent); width: 19px; height: 19px; }
+.chip-link-lead { font-size: 14px; }
+
+body.modal-open { overflow: hidden; }
+
+.signin .modal-card { max-width: 380px; }
+.signin .field { margin-top: 10px; }
+.signin-error {
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  background: #241a18;
+  border: 1px solid #4a2f2b;
+  border-radius: 10px;
+  color: #ff9b83;
+  font-size: 13.5px;
+}
