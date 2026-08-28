@@ -17,5 +17,16 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS"
-  }
+  },
+
+  /*
+   * Where finished sheets are kept. Object storage, not a database: a sheet
+   * is a JPEG, and everything anyone needs to find one again — whose it is,
+   * what kind, when — fits in the object's own key and metadata. R2 lists
+   * by prefix, so "every sheet belonging to user 33" is a listing, not a
+   * query. See src/worker.js.
+   */
+  "r2_buckets": [
+    { "binding": "SHEETS", "bucket_name": "hairselfie-sheets" }
+  ]
 }

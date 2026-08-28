@@ -18,6 +18,10 @@
   /* what the saved file is called — one per layout, so a wardrobe sheet
      does not land in the camera roll named after somebody's hair */
   var FILE_PREFIX = { sheet: 'hair-selfie', wardrobe: 'wardrobe', headshot: 'headshot' };
+
+  /* What this kind of sheet is called when it is filed on the account. The
+     hair layout is 'sheet' internally, which is meaningless in a filename. */
+  var KIND = { sheet: 'hair', wardrobe: 'wardrobe', headshot: 'headshot' };
   var SLOT_DEFS = LAYOUT.defs;
   var SLOT_KEYS = SLOT_DEFS.map(function (d) { return d.key; });
   var defByKey = {};
@@ -82,6 +86,7 @@
   var downloadLink = $('#download-link');
   var saveImageBtn = $('#save-image');
   var saveHint = $('#save-hint');
+  var savedLine = $('#saved-line');
   var summaryBox = $('#details-summary');
   var summaryText = $('#summary-text');
   var editBtn = $('#edit-details');
@@ -953,6 +958,30 @@
     }
   }
 
+  /*
+   * Keep a copy on the account, if there is an account to keep it on. The
+   * image is already on the phone by now, so this runs alongside rather
+   * than in the way: a failure is said out loud and nothing else changes.
+   */
+  function keepACopy(blob) {
+    var Sheets = window.HairSelfieSheets;
+    if (!savedLine) return;
+    if (!Sheets || !Sheets.canSave()) {
+      savedLine.textContent = '';
+      savedLine.hidden = true;
+      return;
+    }
+    savedLine.hidden = false;
+    savedLine.className = 'hint hint-small';
+    savedLine.textContent = 'Saving a copy to your account…';
+    Sheets.save(blob, KIND[LAYOUT.name] || 'hair').then(function () {
+      savedLine.textContent = 'Saved to your StuntListing account.';
+    }).catch(function (err) {
+      savedLine.className = 'hint hint-small is-warn';
+      savedLine.textContent = 'Kept on your phone, but not saved to your account — ' + err.message;
+    });
+  }
+
   function canSharePhotos(file) {
     try {
       return !!(navigator.canShare && navigator.share && navigator.canShare({ files: [file] }));
@@ -1006,6 +1035,7 @@
         requestAnimationFrame(function () {
           resultBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
+        keepACopy(blob);
         return true;
       })
       .catch(function (err) {
