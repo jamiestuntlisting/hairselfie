@@ -952,6 +952,26 @@
     });
     $('#take-photos').addEventListener('click', startCapture);
 
+    /*
+     * Tripod mode needs an in-page camera, which not every browser will
+     * give us — notably an in-app browser on iOS. Rather than offer a
+     * button that cannot work, it stays hidden unless the API is there.
+     */
+    var tripodBtn = $('#tripod-mode');
+    if (tripodBtn && window.HairSelfieTripod && HairSelfieTripod.supported()) {
+      tripodBtn.hidden = false;
+      tripodBtn.addEventListener('click', function () {
+        HairSelfieTripod.run({ defs: SLOT_DEFS, seconds: 3 }).then(function (files) {
+          if (!files) return;
+          Object.keys(files).forEach(function (key) {
+            setSlotImage(key, files[key]);
+          });
+        }).catch(function (err) {
+          alert(err.message);
+        });
+      });
+    }
+
     infoForm.addEventListener('submit', function (e) { e.preventDefault(); });
     infoForm.addEventListener('input', function () {
       if (!state.requestFor) {
