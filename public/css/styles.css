@@ -853,8 +853,15 @@ body.tripod-open { overflow: hidden; }
   pointer-events: none;
 }
 .tripod-label b {
-  display: block;
-  font-size: clamp(30px, 11vw, 52px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  /* one line, always: a wrapped instruction puts the arrow beside the
+     wrong half of it. Sized so the longest of them ("Turn around" plus
+     its arrow) still fits the frame on a narrow phone. */
+  white-space: nowrap;
+  font-size: clamp(24px, 9.2vw, 46px);
   font-weight: 800;
   line-height: 1.05;
   letter-spacing: -0.5px;
@@ -862,6 +869,13 @@ body.tripod-open { overflow: hidden; }
   text-transform: uppercase;
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
 }
+.tripod-arrow {
+  width: 0.92em;
+  height: 0.92em;
+  flex: 0 0 auto;
+  filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.85));
+}
+
 .tripod-label span {
   display: block;
   margin-top: 4px;

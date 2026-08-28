@@ -39,11 +39,29 @@ window.HairSelfieTripod = (function () {
    * definition.
    */
   var CUE = {
-    front: { act: 'Face front',  of: 'Front photo' },
-    left:  { act: 'Turn right',  of: 'Left side photo' },
-    right: { act: 'Turn left',   of: 'Right side photo' },
-    back:  { act: 'Turn around', of: 'Back photo' }
+    front: { act: 'Face front',  of: 'Front photo',       arrow: null },
+    left:  { act: 'Turn right',  of: 'Left side photo',   arrow: 'right' },
+    right: { act: 'Turn left',   of: 'Right side photo',  arrow: 'left' },
+    back:  { act: 'Turn around', of: 'Back photo',        arrow: 'around' }
   };
+
+  /*
+   * The arrow points the way the words say. It is there to be read at a
+   * glance from across the room, not to be worked out — so it never says
+   * anything the text does not.
+   */
+  var ARROW = {
+    right:  'M3 12h15M12.5 5.5 19 12l-6.5 6.5',
+    left:   'M21 12H6M11.5 5.5 5 12l6.5 6.5',
+    around: 'M4 20V12a7 7 0 0 1 14 0v8M13 15.5 18 20.5l5-5'
+  };
+
+  function arrowSvg(dir) {
+    if (!dir || !ARROW[dir]) return '';
+    return '<svg class="tripod-arrow" viewBox="0 0 24 24" aria-hidden="true">' +
+           '<path d="' + ARROW[dir] + '" fill="none" stroke="currentColor" ' +
+           'stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  }
 
   function supported() {
     return !!(navigator.mediaDevices &&
@@ -223,8 +241,8 @@ window.HairSelfieTripod = (function () {
     var settle = null;
 
     function cueFor(def) {
-      if (defs.length === 1) return { act: 'Face front', of: 'Headshot' };
-      return CUE[def.key] || { act: def.label, of: def.label };
+      if (defs.length === 1) return { act: 'Face front', of: 'Headshot', arrow: null };
+      return CUE[def.key] || { act: def.label, of: def.label, arrow: null };
     }
 
     function setCue(title, detail) {
@@ -236,8 +254,13 @@ window.HairSelfieTripod = (function () {
        photo it is, so the instruction and the slot never look at odds. */
     function setLabel(cue) {
       if (!cue) { u.label.hidden = true; u.label.innerHTML = ''; return; }
+      var arrow = arrowSvg(cue.arrow);
+      /* a left arrow leads, the others follow — so the arrow sits on the
+         side of the words it is pointing towards */
+      var inner = cue.arrow === 'left' ? arrow + cue.act : cue.act + arrow;
       u.label.hidden = false;
-      u.label.innerHTML = '<b>' + cue.act + '</b><span>' + cue.of + '</span>';
+      u.label.innerHTML = '<b data-arrow="' + (cue.arrow || 'none') + '">' + inner +
+        '</b><span>' + cue.of + '</span>';
     }
 
     function showGuide(def) {
