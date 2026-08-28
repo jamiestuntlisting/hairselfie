@@ -955,7 +955,9 @@
         }
       });
     });
-    $('#take-photos').addEventListener('click', startCapture);
+    /* one-at-a-time capture is only offered where tripod mode is not */
+    var takeBtn = $('#take-photos');
+    if (takeBtn) takeBtn.addEventListener('click', startCapture);
 
     /*
      * Tripod mode needs an in-page camera, which not every browser will

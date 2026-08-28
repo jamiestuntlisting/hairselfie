@@ -1,6 +1,6 @@
 /*
- * Tripod mode (beta) — prop the phone up, press start, and it takes the
- * whole set on a timer with three seconds between shots.
+ * Tripod mode — prop the phone up, press start, and it takes the whole
+ * set on a timer with three seconds between shots.
  *
  * This is the one flow that cannot use <input capture>: handing off to the
  * camera app means a tap and a "Use Photo" for every shot. So it opens the
@@ -158,7 +158,7 @@ window.HairSelfieTripod = (function () {
     root.innerHTML =
       '<div class="tripod-card">' +
         '<div class="tripod-head">' +
-          '<h3>Tripod mode <span class="beta">BETA</span></h3>' +
+          '<h3>Tripod mode</h3>' +
           '<button type="button" class="btn btn-small" data-act="close">Close</button>' +
         '</div>' +
         '<div class="tripod-stage">' +
