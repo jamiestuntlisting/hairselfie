@@ -171,7 +171,8 @@ main {
 }
 .photo-actions .btn { width: 100%; padding: 13px 18px; font-size: 15.5px; }
 
-input[type="text"], input[type="tel"], input[type="email"], input[type="search"] {
+input[type="text"], input[type="tel"], input[type="email"], input[type="search"],
+input[type="password"] {
   width: 100%;
   background: #101218;
   color: var(--text);

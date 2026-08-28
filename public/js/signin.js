@@ -41,8 +41,6 @@ window.HairSelfieSignIn = (function () {
     root.innerHTML =
       '<div class="modal-card">' +
         '<h3 id="signin-title">Sign in to StuntListing</h3>' +
-        '<p class="hint hint-small">Your details fill themselves in, and coordinators can ' +
-          'send you a request.</p>' +
         '<form id="signin-form" autocomplete="on">' +
           '<div class="field field-wide">' +
             '<label for="si-email">Email</label>' +
