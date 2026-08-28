@@ -29,12 +29,20 @@ window.HairSelfieTripod = (function () {
    * just made people wait through the same three seconds twice.
    */
 
-  /* Said out loud, so short. The screen carries the longer version. */
+  /*
+   * What to do, in two words, said and shown identically.
+   *
+   * Note which way each one turns: putting your LEFT ear to the camera
+   * means turning to your RIGHT. So the left-side photo is "turn right".
+   * It reads like a mistake and is not one — the slot name says what the
+   * photo is, the instruction says what to do, and they are opposites by
+   * definition.
+   */
   var CUE = {
-    front: { say: 'Front. Face the camera.', show: 'Face the camera' },
-    left:  { say: 'Left side. Left ear to the camera.', show: 'Left ear to the camera' },
-    right: { say: 'Right side. Right ear to the camera.', show: 'Right ear to the camera' },
-    back:  { say: 'Back. Turn all the way around.', show: 'Turn all the way around' }
+    front: { act: 'Face front',  of: 'Front photo' },
+    left:  { act: 'Turn right',  of: 'Left side photo' },
+    right: { act: 'Turn left',   of: 'Right side photo' },
+    back:  { act: 'Turn around', of: 'Back photo' }
   };
 
   function supported() {
@@ -79,8 +87,19 @@ window.HairSelfieTripod = (function () {
     setTimeout(function () { beep(950, 70, 0.14); }, 50);
   }
 
+  var VOICE_KEY = 'hairselfie.tripod.voice';
+
+  function voiceOn() {
+    try { return localStorage.getItem(VOICE_KEY) !== 'off'; } catch (e) { return true; }
+  }
+
+  function setVoice(on) {
+    try { localStorage.setItem(VOICE_KEY, on ? 'on' : 'off'); } catch (e) { /* ignore */ }
+  }
+
   function say(text) {
     try {
+      if (!voiceOn()) return;
       if (!window.speechSynthesis) return;
       window.speechSynthesis.cancel();
       var u = new SpeechSynthesisUtterance(text);
@@ -120,13 +139,15 @@ window.HairSelfieTripod = (function () {
           '<div class="tripod-flash" aria-hidden="true"></div>' +
         '</div>' +
         '<p class="tripod-cue" aria-live="polite"></p>' +
-        '<div class="tripod-strip"></div>' +
+        /* directly under the picture: on a phone the thumbnails used to
+           push this off the bottom of the screen */
         '<div class="tripod-actions">' +
           '<button type="button" class="btn btn-primary btn-big" data-act="use" hidden>Use these photos</button>' +
           '<button type="button" class="btn btn-primary btn-big" data-act="start">Start</button>' +
         '</div>' +
-        '<p class="tripod-note">Each shot is called out loud and counted down, ' +
-          'so you can turn away from the screen.</p>' +
+        '<label class="tripod-voice"><input type="checkbox" data-act="voice" checked> ' +
+          'Say each one out loud</label>' +
+        '<div class="tripod-strip"></div>' +
       '</div>';
     document.body.appendChild(root);
     ui = {
@@ -140,8 +161,14 @@ window.HairSelfieTripod = (function () {
       strip: root.querySelector('.tripod-strip'),
       start: root.querySelector('[data-act="start"]'),
       use: root.querySelector('[data-act="use"]'),
+      voice: root.querySelector('[data-act="voice"]'),
       close: root.querySelector('[data-act="close"]')
     };
+    ui.voice.checked = voiceOn();
+    ui.voice.addEventListener('change', function () {
+      setVoice(ui.voice.checked);
+      if (!ui.voice.checked) hush();
+    });
     return ui;
   }
 
@@ -194,21 +221,21 @@ window.HairSelfieTripod = (function () {
     var settle = null;
 
     function cueFor(def) {
-      if (defs.length === 1) return { say: 'Face the camera.', show: 'Face the camera' };
-      return CUE[def.key] || { say: def.label + '.', show: def.label };
+      if (defs.length === 1) return { act: 'Face front', of: 'Headshot' };
+      return CUE[def.key] || { act: def.label, of: def.label };
     }
 
     function setCue(title, detail) {
       u.cue.innerHTML = '<b>' + title + '</b>' + (detail ? '<span>' + detail + '</span>' : '');
     }
 
-    /* The angle, over the picture and as large as it will go — this is
-       what you are checking from across the room, not the small print. */
-    function setLabel(def, detail) {
-      if (!def) { u.label.hidden = true; u.label.innerHTML = ''; return; }
+    /* What to do, over the picture and as large as it will go — this is
+       what you are reading from across the room. Underneath it, which
+       photo it is, so the instruction and the slot never look at odds. */
+    function setLabel(cue) {
+      if (!cue) { u.label.hidden = true; u.label.innerHTML = ''; return; }
       u.label.hidden = false;
-      u.label.innerHTML = '<b>' + def.label + '</b>' +
-        (detail ? '<span>' + detail + '</span>' : '');
+      u.label.innerHTML = '<b>' + cue.act + '</b><span>' + cue.of + '</span>';
     }
 
     function showGuide(def) {
@@ -251,14 +278,16 @@ window.HairSelfieTripod = (function () {
       });
     }
 
-    /* One angle: cue, three ticks, shutter. */
-    function shoot(def) {
+    /* One angle: cue, three ticks, shutter. The instruction is over the
+       picture; the line underneath says where you are in the set, which is
+       the one thing the big label cannot tell you. */
+    function shoot(def, status) {
       if (cancelled) return Promise.resolve();
       var cue = cueFor(def);
-      setLabel(def, cue.show);
-      setCue('Taking ' + def.label.toLowerCase(), '');
+      setLabel(cue);
+      setCue(status || cue.act, '');
       showGuide(def);
-      say(cue.say);
+      say(cue.act);
 
       var n = seconds;
       var t0 = now();
@@ -294,8 +323,12 @@ window.HairSelfieTripod = (function () {
     }
 
     function sequence(list) {
-      return list.reduce(function (chain, def) {
-        return chain.then(function () { return shoot(def); });
+      var total = list.length;
+      return list.reduce(function (chain, def, i) {
+        return chain.then(function () {
+          return shoot(def, total > 1 ? ('Photo ' + (i + 1) + ' of ' + total)
+                                      : 'Taking your photo');
+        });
       }, Promise.resolve()).then(function () {
         /* let the encodes that ran behind the countdown finish */
         return Promise.all(encoding);
@@ -306,7 +339,7 @@ window.HairSelfieTripod = (function () {
         var done = defs.every(function (d) { return shots[d.key]; });
         setCue(done ? 'All done' : 'Stopped',
                done ? 'Check them below — tap any one to retake it.' : '');
-        say(done ? (defs.length === 1 ? 'Done.' : 'All done.') : 'Stopped.');
+        say(done ? 'Done' : 'Stopped');
         u.start.hidden = false;
         u.start.textContent = 'Take them again';
         u.use.hidden = !Object.keys(shots).length;
@@ -356,7 +389,9 @@ window.HairSelfieTripod = (function () {
       audio();
       u.start.hidden = true;
       u.use.hidden = true;
-      shoot(def).then(function () { return sequence([]); });
+      shoot(def, 'Retaking ' + def.label.toLowerCase()).then(function () {
+        return sequence([]);
+      });
     };
 
     return new Promise(function (resolve, reject) {
@@ -377,9 +412,9 @@ window.HairSelfieTripod = (function () {
         u.count.textContent = '';
         shots = {};
         setCue('Ready for your ' + (defs.length === 1 ? 'photo' : 'photos') + '?',
-               'Prop the phone up so your head fills the guide. ' +
-               (defs.length === 1 ? 'It counts down from three.'
-                                  : 'Front first, then left, right and back.'));
+               defs.length === 1
+                 ? 'Prop the phone up, then press ready.'
+                 : 'Face front, turn right, turn left, turn around.');
         setLabel(null);
         showGuide(defs[0]);
         renderStrip();

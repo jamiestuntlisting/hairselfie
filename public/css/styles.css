@@ -948,5 +948,17 @@ body.tripod-open { overflow: hidden; }
 .tripod-thumb:hover em, .tripod-thumb:focus em { opacity: 1; }
 .tripod-thumb[disabled] { cursor: default; }
 
-.tripod-actions { margin-top: 13px; display: grid; gap: 8px; }
+.tripod-actions { margin-top: 12px; display: grid; gap: 8px; }
+
+.tripod-voice {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 11px;
+  font-size: 14px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+.tripod-voice input { accent-color: var(--accent); width: 19px; height: 19px; }
 .tripod-note { margin: 11px 0 0; font-size: 12.5px; color: #6d7685; line-height: 1.45; }
