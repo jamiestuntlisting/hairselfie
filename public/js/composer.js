@@ -34,15 +34,18 @@ window.Composer = (function () {
    * person in a 4:5 frame is mostly empty air either side.
    */
   var WARDROBE_DEFS = [
-    { key: 'front', label: 'Front',      outline: 'body', mirror: false, facing: '' },
-    { key: 'left',  label: 'Left side',  outline: 'body', mirror: false, facing: 'left side to camera' },
-    { key: 'right', label: 'Right side', outline: 'body', mirror: true,  facing: 'right side to camera' },
-    { key: 'back',  label: 'Back',       outline: 'body', mirror: false, facing: '' }
+    { key: 'front', label: 'Front',      outline: 'body',        mirror: false, facing: '' },
+    { key: 'left',  label: 'Left side',  outline: 'bodyProfile', mirror: false, facing: 'left side to camera' },
+    { key: 'right', label: 'Right side', outline: 'bodyProfile', mirror: true,  facing: 'right side to camera' },
+    { key: 'back',  label: 'Back',       outline: 'body',        mirror: false, facing: '' }
   ];
 
   var LAYOUTS = {
     sheet:    { cols: 2, rows: 2, cellWidth: 1000, cellHeight: 1250, defs: SLOT_DEFS },
-    wardrobe: { cols: 2, rows: 2, cellWidth: 1000, cellHeight: 1500, defs: WARDROBE_DEFS },
+    /* cropped in at the sides: a standing figure does not need the width a
+       head-and-shoulders shot does, and the empty air was the least useful
+       part of the frame */
+    wardrobe: { cols: 2, rows: 2, cellWidth: 800, cellHeight: 1500, defs: WARDROBE_DEFS },
     headshot: { cols: 1, rows: 1, cellWidth: 1600, cellHeight: 2000, defs: HEADSHOT_DEFS }
   };
 

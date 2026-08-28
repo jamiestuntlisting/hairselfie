@@ -764,8 +764,9 @@
   function readSheet() {
     var o = readForm();
     o.note = noteInput.value.trim();
-    o.canCut = cutBox.checked;
-    o.canShave = shaveBox.checked;
+    /* the hair questions do not appear on every page */
+    o.canCut = !!(cutBox && cutBox.checked);
+    o.canShave = !!(shaveBox && shaveBox.checked);
     return o;
   }
 

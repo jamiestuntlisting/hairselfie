@@ -75,7 +75,7 @@ window.Outlines = (function () {
    * height, feet just off the bottom, so someone matching it is standing
    * far enough back to show the whole outfit.
    */
-  var BODY_VIEWBOX = '0 0 400 600';
+  var BODY_VIEWBOX = '0 0 400 750';
 
   var BODY_PATH = [
     // head
@@ -106,11 +106,59 @@ window.Outlines = (function () {
     'M268 576 C 279 580 287 584 287 588 L 209 588'
   ].join(' ');
 
+  /*
+   * The bodies are drawn in a 400×600 box and shown in a 400×750 one — the
+   * wardrobe photo is cropped in at the sides, so the frame is narrower and
+   * the figure has to grow to fill it. The transform below scales the
+   * figure about its own centre and drops it into the centre of the taller
+   * box; the numbers come from where the figure actually sits (y 26 → 588,
+   * centre 307) rather than from the box.
+   */
+  var BODY_FIT = 'translate(200 378) scale(1.23) translate(-200 -307)';
+  var HEAD_FIT = 'translate(200 62) scale(' + HEAD_GROW + ') translate(-200 -62)';
+
+  /*
+   * The same figure seen from the side, facing LEFT — the direction a left
+   * side view faces, by the same rule as the head profile: the camera sees
+   * your left side, so your front is on the viewer's left. The right slot
+   * mirrors it.
+   *
+   * Drawn in the same 400×600 box as the front figure and on the same
+   * vertical anchors — crown 26, chin 138, hips 352, feet 588 — so the two
+   * are the same height in the frame and a set of four does not appear to
+   * change the person's height halfway through.
+   */
+  var BODY_PROFILE_PATH = [
+    // skull: crown, round the back, down to the nape
+    'M203 26 C 228 26 245 50 245 82 C 245 106 238 124 228 134',
+    // face: crown, forehead, nose, lips, chin, jaw
+    'M203 26 C 182 27 166 46 165 74 C 164 84 161 90 156 96',
+    'C 151 103 152 110 158 112 C 162 114 161 118 158 121',
+    'C 155 126 159 132 167 134 C 176 137 186 138 196 138',
+    // neck
+    'M196 138 C 196 148 195 155 193 160',
+    'M228 134 C 229 145 231 152 234 158',
+    // back: shoulder down to the seat
+    'M234 158 C 248 166 254 186 254 214 C 254 256 250 300 246 352',
+    // front: chest, belly, hip
+    'M193 160 C 178 168 170 188 169 214 C 168 254 170 300 174 352',
+    // the near arm, hanging just in front of the body
+    'M214 168 C 206 200 202 250 202 300 C 202 322 203 338 205 352',
+    'M205 352 C 199 362 200 375 208 378 C 215 381 221 374 220 365',
+    // legs: front of the thigh and shin, then the back of them
+    'M174 352 C 172 400 174 452 178 500 C 180 534 181 556 180 574',
+    'M246 352 C 244 400 238 452 228 500 C 220 534 214 556 211 574',
+    // foot, pointing the way the figure faces
+    'M180 574 C 168 578 148 582 145 587 C 143 590 146 592 152 592 L 211 592',
+    'C 213 586 213 579 211 574'
+  ].join(' ');
+
   /* Declared after the paths they name, so nothing here is undefined. */
   var KINDS = {
-    front:   { path: FRONT_PATH,   box: VIEWBOX,      grow: HEAD_GROW, about: [200, 62] },
-    profile: { path: PROFILE_PATH, box: VIEWBOX,      grow: HEAD_GROW, about: [200, 62] },
-    body:    { path: BODY_PATH,    box: BODY_VIEWBOX, grow: 1,         about: [200, 300] }
+    front:       { path: FRONT_PATH,        box: VIEWBOX,      transform: HEAD_FIT },
+    profile:     { path: PROFILE_PATH,      box: VIEWBOX,      transform: HEAD_FIT },
+    body:        { path: BODY_PATH,         box: BODY_VIEWBOX, transform: BODY_FIT },
+    bodyProfile: { path: BODY_PROFILE_PATH, box: BODY_VIEWBOX, transform: BODY_FIT }
   };
 
   function kindFor(kind) {
@@ -130,11 +178,7 @@ window.Outlines = (function () {
     var k = kindFor(kind);
     var parts = [];
     if (mirror) parts.push('translate(' + boxWidth(k.box) + ' 0) scale(-1 1)');
-    if (k.grow !== 1) {
-      parts.push('translate(' + k.about[0] + ' ' + k.about[1] + ')');
-      parts.push('scale(' + k.grow + ')');
-      parts.push('translate(' + (-k.about[0]) + ' ' + (-k.about[1]) + ')');
-    }
+    if (k.transform) parts.push(k.transform);
     var transform = parts.length ? ' transform="' + parts.join(' ') + '"' : '';
     return (
       '<svg viewBox="' + k.box + '" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +

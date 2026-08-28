@@ -250,7 +250,10 @@ input:focus-visible, select:focus-visible, .btn:focus-visible {
   width: 100%;
   height: 4.4em;
   margin: 0 -8px -8px;
-  background: linear-gradient(rgba(10, 11, 14, 0), rgba(10, 11, 14, 0.94) 55%);
+  /* enough to read white text through, not so much that a standing
+     figure loses its feet behind it */
+  background: linear-gradient(rgba(10, 11, 14, 0), rgba(10, 11, 14, 0.5) 32%,
+                              rgba(10, 11, 14, 0.88) 72%);
   border-radius: 0 0 11px 11px;
   /* between the guide and the words: a ::before is the first child, so
      without this the guide would draw straight over it */
