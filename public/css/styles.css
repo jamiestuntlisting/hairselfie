@@ -1125,3 +1125,30 @@ body.modal-open { overflow: hidden; }
 .admin-table td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); white-space: nowrap; }
 .admin-table tr.is-quiet td { color: var(--muted); }
 .admin-id { color: #6d7685; font-size: 12px; }
+
+.range { margin-left: auto; display: flex; gap: 6px; }
+.chart-scroll { overflow-x: auto; padding-bottom: 4px; }
+.chart-scroll svg { display: block; }
+.chart-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.chart-key span { display: inline-flex; align-items: center; gap: 6px; }
+.chart-key i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+.chart-key .chart-top { margin-left: auto; color: #6d7685; }
+
+.shot-cell { width: 54px; padding-right: 0 !important; }
+.shot {
+  display: block;
+  width: 44px;
+  aspect-ratio: 4 / 5;
+  background: #0a0b0e;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+tr.is-broken .shot { border: 1px dashed #4a2f2b; }

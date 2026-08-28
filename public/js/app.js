@@ -1185,6 +1185,11 @@
   }
 
   function init() {
+    /* every load counts, signed in or not — see js/sheets.js */
+    if (window.HairSelfieSheets) {
+      HairSelfieSheets.recordUse(KIND[LAYOUT.name] || LAYOUT.name);
+    }
+
     /* Every frame that shows a photo — the grid cells, the adjust stage,
        the tripod preview — takes its shape from the layout, so a wardrobe
        photo is framed the same way it will be printed. */
@@ -1199,7 +1204,6 @@
 
     Api.getSession().then(function (session) {
       state.me = session.user || {};
-      if (window.HairSelfieSheets) HairSelfieSheets.markSeen();
       fillForm(state.me);
       applyShaveQuestion(state.me);
       renderSessionChip();

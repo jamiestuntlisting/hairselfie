@@ -59,27 +59,37 @@ window.HairSelfieSheets = (function () {
   }
 
   /*
-   * Mark today. Saved sheets show who is making things; this shows who
-   * turned up at all, which is the half that says whether anyone is using
-   * it. Once a day per browser — the Worker overwrites the day's mark
-   * anyway, and there is no reason to ask it to.
+   * Count this page load — signed in or not. The visitor id is a random
+   * string kept in this browser and nothing else: it exists so that ten
+   * loads by one person do not read as ten people, and it says nothing
+   * about who they are.
    */
-  function markSeen() {
-    var t = token();
-    if (!t) return Promise.resolve(false);
-    var day = new Date().toISOString().slice(0, 10);
+  function visitorId() {
     try {
-      if (localStorage.getItem('hairselfie.seen') === day) return Promise.resolve(false);
-    } catch (e) { /* no storage: mark every load, which is still bounded */ }
+      var id = localStorage.getItem('hairselfie.visitor');
+      if (!id) {
+        id = (window.crypto && crypto.randomUUID)
+          ? crypto.randomUUID().replace(/-/g, '').slice(0, 16)
+          : Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+        localStorage.setItem('hairselfie.visitor', id);
+      }
+      return id;
+    } catch (e) {
+      return '';   // private mode: the Worker gives it a one-off id
+    }
+  }
 
-    return fetch('/api/seen', { method: 'POST', headers: { Authorization: 'Bearer ' + t } })
-      .then(function (res) {
-        if (!res.ok) return false;
-        try { localStorage.setItem('hairselfie.seen', day); } catch (e) { /* ignore */ }
-        return true;
-      })
+  function recordUse(page) {
+    var headers = { 'Content-Type': 'application/json' };
+    var t = token();
+    if (t) headers.Authorization = 'Bearer ' + t;
+    return fetch('/api/use', {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify({ visitor: visitorId(), page: page || 'other' })
+    }).then(function (res) { return res.ok; })
       .catch(function () { return false; });   // never worth interrupting anyone over
   }
 
-  return { save: save, list: list, canSave: canSave, markSeen: markSeen };
+  return { save: save, list: list, canSave: canSave, recordUse: recordUse };
 })();

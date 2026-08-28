@@ -27,11 +27,12 @@
    * query. See src/worker.js.
    */
   /*
-   * Who can see the admin page. Checked against the email on the signed-in
-   * profile, server-side — the same list the rate calculator uses.
+   * Who can see the admin page and every saved sheet. StuntListing user
+   * ids, comma separated, checked server-side against the profile the
+   * token belongs to. Add ids here to add admins.
    */
   "vars": {
-    "ADMIN_EMAILS": "james.northrup@gmail.com,jamie@stuntlisting.com,warrenhullstunts@gmail.com,warren.hull.stunts@gmail.com,warren@stuntlisting.com,greg@stuntlisting.com,info@stuntlisting.com,thestuntassistant@gmail.com,derric@stuntlisting.com"
+    "ADMIN_IDS": "33"
   },
 
   "r2_buckets": [

@@ -166,6 +166,7 @@
     urls = [];
   });
 
+  if (Sheets.recordUse) Sheets.recordUse('saved');
   renderChip();
   load();
 })();

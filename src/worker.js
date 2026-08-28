@@ -22,7 +22,9 @@ const PROXY_PATH = '/api/graphql';
 const SHEETS_PATH = '/api/sheets';
 const SEEN_PATH = '/api/seen';
 const ADMIN_PATH = '/api/admin';
-const SEEN_PREFIX = '_seen/';
+const SEEN_PREFIX = '_seen/';        // the earlier signed-in-only marks
+const USE_PREFIX = '_use/';
+const USE_PATH = '/api/use';
 const MAX_SHEET = 12 * 1024 * 1024;   // a sheet is under 1 MB; this is a ceiling, not a target
 
 export default {
@@ -32,8 +34,8 @@ export default {
     if (url.pathname === SHEETS_PATH) {
       return sheets(request, env, url);
     }
-    if (url.pathname === SEEN_PATH) {
-      return seen(request, env, url);
+    if (url.pathname === SEEN_PATH || url.pathname === USE_PATH) {
+      return used(request, env, url);
     }
     if (url.pathname === ADMIN_PATH) {
       return admin(request, env, url);
@@ -187,6 +189,22 @@ async function whoIs(auth) {
   };
 }
 
+/*
+ * The key was built to be readable on its own —
+ *   33/warren-hull_hair_2026-08-28T15-32-25.jpg
+ * — so it is a fallback for anything the metadata does not carry.
+ */
+function readKey(key) {
+  const [userId, file] = String(key).split('/');
+  const m = String(file || '').match(/^(.*)_([a-z]+)_(\d{4}-\d{2}-\d{2}T[\d-]+)\./);
+  if (!m) return { userId: userId || '', name: '', kind: '' };
+  return {
+    userId: userId || '',
+    name: m[1].split('-').map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(' '),
+    kind: m[2]
+  };
+}
+
 function slug(s) {
   return String(s || '').toLowerCase()
     .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
@@ -234,10 +252,13 @@ async function listMine(env, url, who) {
 }
 
 async function one(env, url, who, key) {
-  /* Your own prefix or nothing: the key is guessable, so it is checked
-     rather than trusted. */
-  if (!key || key.indexOf(who.id + '/') !== 0) {
+  /* Your own prefix, or anything at all if you run the place. The key is
+     guessable, so this is checked rather than trusted. */
+  if (!key || (key.indexOf(who.id + '/') !== 0 && !isAdmin(env, who))) {
     return json({ error: 'Not yours.' }, 403);
+  }
+  if (key.indexOf(USE_PREFIX) === 0 || key.indexOf(SEEN_PREFIX) === 0) {
+    return json({ error: 'Not a sheet.' }, 403);
   }
   const object = await env.SHEETS.get(key);
   if (!object) return json({ error: 'No such sheet.' }, 404);
@@ -252,21 +273,24 @@ async function one(env, url, who, key) {
 
 /* ── who is using it ────────────────────────────────────────────────
  *
- * Saved sheets say who is making things. They say nothing about who signed
- * in and made nothing, which is the more interesting half of "is anyone
- * using this". So the app marks a day when somebody arrives signed in.
+ * Saved sheets say who is making things. They say nothing about everyone
+ * who opened the page and made nothing, which is the more interesting half
+ * of "is anyone using this" — and nothing at all about people who never
+ * signed in.
  *
- * One object per person per day, overwritten:
+ * So every page load is counted, signed in or not, as one object per
+ * visitor per day:
  *
- *   _seen/2026-08-28/33.json
+ *   _use/2026-08-28/9f3c1a7e.json
+ *   { visitor, userId, name, loads: 6, pages: { hair: 4, wardrobe: 2 } }
  *
- * That bounds the writes to one a day each however often somebody opens
- * the page, and a listing of the prefix is the day's active people. Day
- * granularity is all "are people logging in" needs, and the alternative —
- * a row per visit — is a database, which nothing here yet justifies.
+ * A row per visit would be neater to query and would also be a database.
+ * This keeps the writes to one object a day per person however often they
+ * open it, while still counting every load inside it — and the visitor id
+ * is a random string from their own browser, not anything about them.
  */
 
-async function seen(request, env, url) {
+async function used(request, env, url) {
   if (!env.SHEETS) return json({ error: 'Not configured.' }, 501);
   const origin = request.headers.get('Origin');
   if (origin && origin !== url.origin) return json({ error: 'Wrong origin.' }, 403);
@@ -275,18 +299,46 @@ async function seen(request, env, url) {
   }
   if (request.method !== 'POST') return json({ error: 'POST only.' }, 405);
 
-  const auth = request.headers.get('Authorization');
-  if (!auth) return json({ error: 'Not signed in.' }, 401);
+  let body = {};
+  try { body = await request.json(); } catch (e) { /* a bare POST still counts */ }
 
-  let who;
-  try { who = await whoIs(auth); } catch (err) { return json({ error: err.message }, 502); }
-  if (!who) return json({ error: 'Not a valid session.' }, 401);
-
+  const visitor = String(body.visitor || '').replace(/[^a-z0-9-]/gi, '').slice(0, 40)
+                  || 'anon-' + Math.random().toString(36).slice(2, 10);
+  const page = String(body.page || 'other').replace(/[^a-z]/gi, '').slice(0, 20) || 'other';
   const day = new Date().toISOString().slice(0, 10);
-  await env.SHEETS.put(`${SEEN_PREFIX}${day}/${who.id}.json`,
-    JSON.stringify({ id: who.id, name: who.name, email: who.email, at: new Date().toISOString() }),
-    { httpMetadata: { contentType: 'application/json' },
-      customMetadata: { userId: who.id, name: who.name } });
+  const key = `${USE_PREFIX}${day}/${visitor}.json`;
+
+  /* what today already says about this visitor */
+  let record = { visitor, userId: '', name: '', loads: 0, pages: {}, first: '', last: '' };
+  try {
+    const existing = await env.SHEETS.get(key);
+    if (existing) record = Object.assign(record, await existing.json());
+  } catch (e) { /* a corrupt record is replaced rather than mourned */ }
+  if (!record.pages) record.pages = {};
+
+  /*
+   * Resolving who somebody is costs a call to StuntListing, so it happens
+   * once a day per visitor rather than on every load: after the first one
+   * the name is already on the record.
+   */
+  const auth = request.headers.get('Authorization');
+  if (auth && !record.userId) {
+    try {
+      const who = await whoIs(auth);
+      if (who) { record.userId = who.id; record.name = who.name; }
+    } catch (e) { /* counted as a guest rather than not counted at all */ }
+  }
+
+  const now = new Date().toISOString();
+  record.loads = (record.loads || 0) + 1;
+  record.pages[page] = (record.pages[page] || 0) + 1;
+  record.first = record.first || now;
+  record.last = now;
+
+  await env.SHEETS.put(key, JSON.stringify(record), {
+    httpMetadata: { contentType: 'application/json' },
+    customMetadata: { userId: record.userId || '', name: record.name || '', day }
+  });
 
   return json({ ok: true }, 200, url.origin);
 }
@@ -298,9 +350,18 @@ async function seen(request, env, url) {
  * token's profile, never from anything the browser says.
  */
 
-function adminEmails(env) {
-  const raw = (env && env.ADMIN_EMAILS) || '';
-  return String(raw).split(',').map((e) => e.toLowerCase().trim()).filter(Boolean);
+/*
+ * Who runs this. An id rather than an email: it is the same id the sheets
+ * are filed under, it cannot be changed by changing an email address, and
+ * it is what the app already knows about a person.
+ */
+function adminIds(env) {
+  const raw = (env && env.ADMIN_IDS) || '';
+  return String(raw).split(',').map((e) => e.trim()).filter(Boolean);
+}
+
+function isAdmin(env, who) {
+  return !!who && adminIds(env).indexOf(String(who.id)) !== -1;
 }
 
 async function everything(bucket, prefix) {
@@ -310,7 +371,9 @@ async function everything(bucket, prefix) {
      page can usefully show, and an admin view should not be able to spend
      the whole request budget */
   for (let page = 0; page < 5; page++) {
-    const chunk = await bucket.list({ prefix, limit: 1000, cursor });
+    /* include: custom metadata is left out of a listing unless asked for,
+       which is why the admin page first showed every sheet as "— —" */
+    const chunk = await bucket.list({ prefix, limit: 1000, cursor, include: ['customMetadata'] });
     out.push(...chunk.objects);
     if (!chunk.truncated) return { objects: out, complete: true };
     cursor = chunk.cursor;
@@ -333,45 +396,110 @@ async function admin(request, env, url) {
   try { who = await whoIs(auth); } catch (err) { return json({ error: err.message }, 502); }
   if (!who) return json({ error: 'That session is not valid any more.' }, 401);
 
-  const allowed = adminEmails(env);
-  if (!who.email || allowed.indexOf(who.email) === -1) {
+  if (!isAdmin(env, who)) {
     return json({ error: 'This page is for StuntListing admins.' }, 403);
   }
 
-  const [saved, visits] = await Promise.all([
+  const [saved, visits, marks] = await Promise.all([
     everything(env.SHEETS, ''),
+    everything(env.SHEETS, USE_PREFIX),
     everything(env.SHEETS, SEEN_PREFIX)
   ]);
 
   const sheetsOut = saved.objects
-    .filter((o) => o.key.indexOf(SEEN_PREFIX) !== 0)
+    .filter((o) => o.key.indexOf(SEEN_PREFIX) !== 0 && o.key.indexOf(USE_PREFIX) !== 0)
     .map((o) => {
       const meta = o.customMetadata || {};
+      const fromKey = readKey(o.key);
       return {
         key: o.key,
-        userId: meta.userId || o.key.split('/')[0],
-        name: meta.name || '',
-        kind: meta.kind || '',
+        userId: meta.userId || fromKey.userId,
+        name: meta.name || fromKey.name,
+        kind: meta.kind || fromKey.kind,
         size: o.size,
         createdAt: meta.createdAt || o.uploaded
       };
     })
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
 
-  const seenOut = visits.objects.map((o) => {
+  /*
+   * Usage is rolled up here rather than sent raw: a day of visitors is a
+   * handful of numbers, and the page has no use for the individual
+   * records. Reading the bodies costs one get each, so it is capped.
+   */
+  const READ_CAP = 400;
+  const recent = visits.objects
+    .sort((a, b) => String(b.key).localeCompare(String(a.key)))
+    .slice(0, READ_CAP);
+
+  const days = {};
+  function dayRow(date) {
+    if (!days[date]) {
+      days[date] = { date, visitors: 0, loads: 0, signedIn: 0, guests: 0, pages: {} };
+    }
+    return days[date];
+  }
+
+  const people = {};
+  function person(id, name) {
+    if (!people[id]) people[id] = { userId: id, name: name || '', sheets: 0, last: '', seen: '' };
+    if (name && !people[id].name) people[id].name = name;
+    return people[id];
+  }
+
+  await Promise.all(recent.map(async (o) => {
+    const date = o.key.slice(USE_PREFIX.length).split('/')[0];
+    const row = dayRow(date);
+    let rec = {};
+    try {
+      const got = await env.SHEETS.get(o.key);
+      rec = got ? await got.json() : {};
+    } catch (e) { rec = {}; }
+    row.visitors += 1;
+    row.loads += rec.loads || 1;
+    if (rec.userId) {
+      row.signedIn += 1;
+      const p = person(String(rec.userId), rec.name);
+      if (date > p.seen) p.seen = date;
+    } else {
+      row.guests += 1;
+    }
+    Object.keys(rec.pages || {}).forEach((k) => {
+      row.pages[k] = (row.pages[k] || 0) + rec.pages[k];
+    });
+  }));
+
+  /* the earlier signed-in-only marks, so that history is not lost */
+  marks.objects.forEach((o) => {
     const meta = o.customMetadata || {};
     const parts = o.key.slice(SEEN_PREFIX.length).split('/');
-    return {
-      date: parts[0],
-      userId: meta.userId || (parts[1] || '').replace(/\.json$/, ''),
-      name: meta.name || ''
-    };
-  }).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const date = parts[0];
+    const id = meta.userId || (parts[1] || '').replace(/\.json$/, '');
+    if (!days[date]) {
+      const row = dayRow(date);
+      row.visitors += 1;
+      row.loads += 1;
+      row.signedIn += 1;
+    }
+    if (id) {
+      const p = person(id, meta.name);
+      if (date > p.seen) p.seen = date;
+    }
+  });
+
+  sheetsOut.forEach((sheet) => {
+    const p = person(String(sheet.userId), sheet.name);
+    p.sheets += 1;
+    if (String(sheet.createdAt) > String(p.last)) p.last = sheet.createdAt;
+  });
 
   return json({
-    sheets: sheetsOut,
-    seen: seenOut,
-    complete: saved.complete && visits.complete,
+    sheets: sheetsOut.slice(0, 200),
+    totalSheets: sheetsOut.length,
+    storedBytes: sheetsOut.reduce((n, x) => n + (x.size || 0), 0),
+    usage: Object.keys(days).map((d) => days[d]).sort((a, b) => a.date.localeCompare(b.date)),
+    people: Object.keys(people).map((k) => people[k]),
+    complete: saved.complete && visits.complete && recent.length === visits.objects.length,
     you: who.name
   }, 200, url.origin);
 }
