@@ -16,8 +16,27 @@
 window.HairSelfieTripod = (function () {
   'use strict';
 
-  var SECONDS = 3;            // between shots
-  var FIRST = 3;              // before the first one, unless the page says otherwise
+  /*
+   * How long you get before each shot, including the first. Five by
+   * default — three is enough to turn on the spot and not enough to walk
+   * back into a full-length frame — and whatever you set it to after that.
+   */
+  var SECONDS = 5;
+  var MIN = 1;
+  var MAX = 60;
+  var SECONDS_KEY = 'hairselfie.tripod.seconds';
+
+  function savedSeconds() {
+    try {
+      var n = parseInt(localStorage.getItem(SECONDS_KEY), 10);
+      if (n >= MIN && n <= MAX) return n;
+    } catch (e) { /* no storage: the default stands */ }
+    return SECONDS;
+  }
+
+  function setSeconds(n) {
+    try { localStorage.setItem(SECONDS_KEY, String(n)); } catch (e) { /* ignore */ }
+  }
 
   /*
    * There is deliberately no lead-in countdown. Pressing the button is
@@ -106,6 +125,11 @@ window.HairSelfieTripod = (function () {
           '<button type="button" class="btn btn-primary btn-big" data-act="use" hidden>Use these photos</button>' +
           '<button type="button" class="btn btn-primary btn-big" data-act="start">Start</button>' +
         '</div>' +
+        /* under the button, not above it: the button has to stay within
+           reach of the picture on a phone */
+        '<label class="tripod-delay" id="tripod-delay">Seconds before each shot' +
+          '<input type="number" min="' + MIN + '" max="' + MAX + '" step="1" ' +
+            'inputmode="numeric" data-act="seconds"></label>' +
       '</div>';
     document.body.appendChild(root);
     ui = {
@@ -119,8 +143,19 @@ window.HairSelfieTripod = (function () {
       review: root.querySelector('.tripod-review'),
       start: root.querySelector('[data-act="start"]'),
       use: root.querySelector('[data-act="use"]'),
+      delay: root.querySelector('[data-act="seconds"]'),
+      delayRow: root.querySelector('#tripod-delay'),
       close: root.querySelector('[data-act="close"]')
     };
+    ui.delay.value = savedSeconds();
+    ui.delay.addEventListener('change', function () {
+      var n = parseInt(ui.delay.value, 10);
+      /* anything from one second to a minute; outside that it goes back to
+         what it was rather than silently accepting nonsense */
+      if (!(n >= MIN && n <= MAX)) { ui.delay.value = savedSeconds(); return; }
+      setSeconds(n);
+      if (ui.onSeconds) ui.onSeconds();
+    });
     return ui;
   }
 
@@ -160,10 +195,7 @@ window.HairSelfieTripod = (function () {
   function run(opts) {
     opts = opts || {};
     var defs = opts.defs || [];
-    var seconds = opts.seconds || SECONDS;
-    /* Walking back into a full-length frame takes longer than turning on
-       the spot, so the first countdown can be longer than the rest. */
-    var first = opts.firstSeconds || FIRST;
+    var seconds = opts.seconds || savedSeconds();
     var u = build();
 
     var stream = null;
@@ -234,7 +266,10 @@ window.HairSelfieTripod = (function () {
     /* Waiting for you to say you are set — where it starts, and where
        "take them again" comes back to. */
     function readyState() {
+      seconds = opts.seconds || savedSeconds();
       u.start.hidden = false;
+      u.delayRow.hidden = false;
+      u.delay.value = savedSeconds();
       u.start.textContent = "I'm ready";
       u.start.classList.add('btn-primary');
       u.use.hidden = true;
@@ -242,7 +277,7 @@ window.HairSelfieTripod = (function () {
       setCue('Ready for your ' + (defs.length === 1 ? 'photo' : 'photos') + '?',
              defs.length === 1
                ? 'Prop the phone up, then press ready.'
-               : first + ' seconds to get set, then ' + seconds + ' between shots.');
+               : seconds + ' seconds before each shot.');
       setLabel(null);
       showGuide(defs[0]);
     }
@@ -312,7 +347,7 @@ window.HairSelfieTripod = (function () {
         return chain.then(function () {
           return shoot(def,
             total > 1 ? ('Photo ' + (i + 1) + ' of ' + total) : 'Taking your photo',
-            i === 0 ? first : seconds);
+            seconds);
         });
       }, Promise.resolve()).then(function () {
         /* let the encodes that ran behind the countdown finish */
@@ -325,6 +360,7 @@ window.HairSelfieTripod = (function () {
         showReview();
         setCue(done ? 'All done' : 'Stopped', 'Tap a photo to retake just that one.');
         u.start.hidden = false;
+        u.delayRow.hidden = false;
         u.start.textContent = 'Take them again';
         u.use.hidden = !Object.keys(shots).length;
         /* once there are photos, keeping them is the thing you came to do */
@@ -333,8 +369,12 @@ window.HairSelfieTripod = (function () {
     }
 
     function begin(list) {
+      /* read now rather than when the camera opened, or changing it would
+         only take effect the time after next */
+      seconds = opts.seconds || savedSeconds();
       u.start.hidden = true;
       u.use.hidden = true;
+      u.delayRow.hidden = true;
       return sequence(list);
     }
 
@@ -358,6 +398,9 @@ window.HairSelfieTripod = (function () {
       if (settle) settle(result ? pending : null);
       settle = null;
     }
+
+    /* the ready line quotes the number, so it follows the setting */
+    u.onSeconds = function () { if (!u.start.hidden && !u.use.hidden === false) readyState(); };
 
     u.close.onclick = function () { finish(false); };
     u.use.onclick = function () { finish(true); };
@@ -386,6 +429,7 @@ window.HairSelfieTripod = (function () {
       hideReview();               // back to the live view for this one
       u.start.hidden = true;
       u.use.hidden = true;
+      u.delayRow.hidden = true;
       shoot(def, 'Retaking ' + def.label.toLowerCase()).then(function () {
         return sequence([]);
       });
