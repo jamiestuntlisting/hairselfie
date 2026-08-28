@@ -968,7 +968,11 @@
     if (tripodBtn && window.HairSelfieTripod && HairSelfieTripod.supported()) {
       tripodBtn.hidden = false;
       tripodBtn.addEventListener('click', function () {
-        HairSelfieTripod.run({ defs: SLOT_DEFS, seconds: 3 }).then(function (files) {
+        HairSelfieTripod.run({
+          defs: SLOT_DEFS,
+          seconds: 3,
+          firstSeconds: LAYOUT.firstSeconds
+        }).then(function (files) {
           if (!files) return;
           Object.keys(files).forEach(function (key) {
             setSlotImage(key, files[key]);

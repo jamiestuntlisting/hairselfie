@@ -21,6 +21,7 @@ window.HairSelfieTripod = (function () {
   'use strict';
 
   var SECONDS = 3;            // between shots
+  var FIRST = 3;              // before the first one, unless the page says otherwise
 
   /*
    * There is deliberately no lead-in countdown. Pressing the button is
@@ -239,6 +240,9 @@ window.HairSelfieTripod = (function () {
     opts = opts || {};
     var defs = opts.defs || [];
     var seconds = opts.seconds || SECONDS;
+    /* Walking back into a full-length frame takes longer than turning on
+       the spot, so the first countdown can be longer than the rest. */
+    var first = opts.firstSeconds || FIRST;
     var u = build();
 
     var stream = null;
@@ -317,7 +321,7 @@ window.HairSelfieTripod = (function () {
       setCue('Ready for your ' + (defs.length === 1 ? 'photo' : 'photos') + '?',
              defs.length === 1
                ? 'Prop the phone up, then press ready.'
-               : 'Front, then turn, turn, and turn around.');
+               : first + ' seconds to get set, then ' + seconds + ' between shots.');
       setLabel(null);
       showGuide(defs[0]);
     }
@@ -340,7 +344,7 @@ window.HairSelfieTripod = (function () {
     /* One angle: cue, three ticks, shutter. The instruction is over the
        picture; the line underneath says where you are in the set, which is
        the one thing the big label cannot tell you. */
-    function shoot(def, status) {
+    function shoot(def, status, count) {
       if (cancelled) return Promise.resolve();
       var cue = cueFor(def);
       setLabel(cue);
@@ -348,7 +352,7 @@ window.HairSelfieTripod = (function () {
       showGuide(def);
       say(cue.say);
 
-      var n = seconds;
+      var n = count || seconds;
       var t0 = now();
       var elapsed = 0;
       u.count.textContent = String(n);
@@ -388,8 +392,9 @@ window.HairSelfieTripod = (function () {
       var total = list.length;
       return list.reduce(function (chain, def, i) {
         return chain.then(function () {
-          return shoot(def, total > 1 ? ('Photo ' + (i + 1) + ' of ' + total)
-                                      : 'Taking your photo');
+          return shoot(def,
+            total > 1 ? ('Photo ' + (i + 1) + ' of ' + total) : 'Taking your photo',
+            i === 0 ? first : seconds);
         });
       }, Promise.resolve()).then(function () {
         /* let the encodes that ran behind the countdown finish */

@@ -829,6 +829,9 @@ body.tripod-open { overflow: hidden; }
   max-width: 460px;
   max-height: 100%;
   overflow: auto;
+  /* everything here has to be reachable without scrolling: the button is
+     pressed while standing at arm's length, and a card that scrolls means
+     scrolling down to press it and back up to be in frame */
   background: var(--panel);
   border: 1px solid var(--line-soft);
   border-radius: 16px;
@@ -842,9 +845,21 @@ body.tripod-open { overflow: hidden; }
 }
 .tripod-head h3 { flex: 1 1 auto; margin: 0; font-size: 17px; }
 
+/*
+ * Sized from the height available rather than the width. A wardrobe frame
+ * is 8:15, and at full width that is taller than a phone screen — which is
+ * how the button ended up below the fold.
+ */
 .tripod-stage {
   position: relative;
   aspect-ratio: var(--cell-aspect, 4 / 5);
+  /* svh is the viewport with the browser's own bars showing, which is the
+     height a phone actually gives you; vh first for anything older */
+  height: min(46vh, 520px);
+  height: min(46svh, 520px);
+  width: auto;
+  max-width: 100%;
+  margin: 0 auto;
   background: #000;
   border-radius: 12px;
   overflow: hidden;
@@ -1023,4 +1038,3 @@ body.tripod-open { overflow: hidden; }
   user-select: none;
 }
 .tripod-voice input { accent-color: var(--accent); width: 19px; height: 19px; }
-.tripod-note { margin: 11px 0 0; font-size: 12.5px; color: #6d7685; line-height: 1.45; }

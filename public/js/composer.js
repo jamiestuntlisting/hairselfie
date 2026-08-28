@@ -45,7 +45,9 @@ window.Composer = (function () {
     /* cropped in at the sides: a standing figure does not need the width a
        head-and-shoulders shot does, and the empty air was the least useful
        part of the frame */
-    wardrobe: { cols: 2, rows: 2, cellWidth: 800, cellHeight: 1500, defs: WARDROBE_DEFS },
+    wardrobe: { cols: 2, rows: 2, cellWidth: 800, cellHeight: 1500, defs: WARDROBE_DEFS,
+                /* you have to walk back to be in a full-length frame */
+                firstSeconds: 5 },
     headshot: { cols: 1, rows: 1, cellWidth: 1600, cellHeight: 2000, defs: HEADSHOT_DEFS }
   };
 
@@ -60,6 +62,7 @@ window.Composer = (function () {
       rows: base.rows,
       cellWidth: over.cellWidth || base.cellWidth,
       cellHeight: over.cellHeight || base.cellHeight,
+      firstSeconds: over.firstSeconds || base.firstSeconds || 3,
       defs: base.defs
     };
   }
