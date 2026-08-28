@@ -38,11 +38,17 @@ window.HairSelfieTripod = (function () {
    * photo is, the instruction says what to do, and they are opposites by
    * definition.
    */
+  /*
+   * On screen: one word and a moving arrow, because in three seconds you
+   * are glancing, not reading. Out loud: the direction as well, since the
+   * whole point of the spoken cue is the shots where you cannot see the
+   * screen at all.
+   */
   var CUE = {
-    front: { act: 'Face front',  of: 'Front photo',       arrow: null },
-    left:  { act: 'Turn right',  of: 'Left side photo',   arrow: 'right' },
-    right: { act: 'Turn left',   of: 'Right side photo',  arrow: 'left' },
-    back:  { act: 'Turn around', of: 'Back photo',        arrow: 'around' }
+    front: { act: 'Front', say: 'Front',       arrow: null },
+    left:  { act: 'Turn',  say: 'Turn right',  arrow: 'right' },
+    right: { act: 'Turn',  say: 'Turn left',   arrow: 'left' },
+    back:  { act: 'Turn',  say: 'Turn around', arrow: 'around' }
   };
 
   /*
@@ -58,9 +64,9 @@ window.HairSelfieTripod = (function () {
 
   function arrowSvg(dir) {
     if (!dir || !ARROW[dir]) return '';
-    return '<svg class="tripod-arrow" viewBox="0 0 24 24" aria-hidden="true">' +
+    return '<svg class="tripod-arrow is-' + dir + '" viewBox="0 0 24 24" aria-hidden="true">' +
            '<path d="' + ARROW[dir] + '" fill="none" stroke="currentColor" ' +
-           'stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+           'stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   }
 
   function supported() {
@@ -85,7 +91,7 @@ window.HairSelfieTripod = (function () {
 
   function beep(freq, ms, level) {
     var a = actx;
-    if (!a) return;
+    if (!a || !soundOn()) return;
     try {
       var osc = a.createOscillator();
       var gain = a.createGain();
@@ -105,21 +111,25 @@ window.HairSelfieTripod = (function () {
     setTimeout(function () { beep(950, 70, 0.14); }, 50);
   }
 
-  var VOICE_KEY = 'hairselfie.tripod.voice';
+  var SOUND_KEY = 'hairselfie.tripod.sound';
 
-  /* Off unless asked for: the ticks and the shutter already carry the
-     timing, and a phone that starts talking is a surprise. */
-  function voiceOn() {
-    try { return localStorage.getItem(VOICE_KEY) === 'on'; } catch (e) { return false; }
+  /*
+   * One switch for everything audible — the cue, the per-second ticks and
+   * the shutter — and off unless asked for. A phone that starts beeping
+   * and talking on its own is a surprise, and the countdown is already on
+   * the screen for anyone watching it.
+   */
+  function soundOn() {
+    try { return localStorage.getItem(SOUND_KEY) === 'on'; } catch (e) { return false; }
   }
 
-  function setVoice(on) {
-    try { localStorage.setItem(VOICE_KEY, on ? 'on' : 'off'); } catch (e) { /* ignore */ }
+  function setSound(on) {
+    try { localStorage.setItem(SOUND_KEY, on ? 'on' : 'off'); } catch (e) { /* ignore */ }
   }
 
   function say(text) {
     try {
-      if (!voiceOn()) return;
+      if (!soundOn()) return;
       if (!window.speechSynthesis) return;
       window.speechSynthesis.cancel();
       var u = new SpeechSynthesisUtterance(text);
@@ -156,6 +166,7 @@ window.HairSelfieTripod = (function () {
           '<div class="tripod-guide" aria-hidden="true"></div>' +
           '<div class="tripod-label" aria-hidden="true" hidden></div>' +
           '<div class="tripod-count" aria-hidden="true"></div>' +
+          '<div class="tripod-review" hidden></div>' +
           '<div class="tripod-flash" aria-hidden="true"></div>' +
         '</div>' +
         '<p class="tripod-cue" aria-live="polite"></p>' +
@@ -165,9 +176,8 @@ window.HairSelfieTripod = (function () {
           '<button type="button" class="btn btn-primary btn-big" data-act="use" hidden>Use these photos</button>' +
           '<button type="button" class="btn btn-primary btn-big" data-act="start">Start</button>' +
         '</div>' +
-        '<label class="tripod-voice"><input type="checkbox" data-act="voice"> ' +
+        '<label class="tripod-voice"><input type="checkbox" data-act="sound"> ' +
           'Say each one out loud</label>' +
-        '<div class="tripod-strip"></div>' +
       '</div>';
     document.body.appendChild(root);
     ui = {
@@ -178,15 +188,15 @@ window.HairSelfieTripod = (function () {
       count: root.querySelector('.tripod-count'),
       flash: root.querySelector('.tripod-flash'),
       cue: root.querySelector('.tripod-cue'),
-      strip: root.querySelector('.tripod-strip'),
+      review: root.querySelector('.tripod-review'),
       start: root.querySelector('[data-act="start"]'),
       use: root.querySelector('[data-act="use"]'),
-      voice: root.querySelector('[data-act="voice"]'),
+      voice: root.querySelector('[data-act="sound"]'),
       close: root.querySelector('[data-act="close"]')
     };
-    ui.voice.checked = voiceOn();
+    ui.voice.checked = soundOn();
     ui.voice.addEventListener('change', function () {
-      setVoice(ui.voice.checked);
+      setSound(ui.voice.checked);
       if (!ui.voice.checked) hush();
     });
     return ui;
@@ -241,17 +251,17 @@ window.HairSelfieTripod = (function () {
     var settle = null;
 
     function cueFor(def) {
-      if (defs.length === 1) return { act: 'Face front', of: 'Headshot', arrow: null };
-      return CUE[def.key] || { act: def.label, of: def.label, arrow: null };
+      if (defs.length === 1) return { act: 'Front', say: 'Front', arrow: null };
+      return CUE[def.key] || { act: def.label, say: def.label, arrow: null };
     }
 
     function setCue(title, detail) {
       u.cue.innerHTML = '<b>' + title + '</b>' + (detail ? '<span>' + detail + '</span>' : '');
     }
 
-    /* What to do, over the picture and as large as it will go — this is
-       what you are reading from across the room. Underneath it, which
-       photo it is, so the instruction and the slot never look at odds. */
+    /* What to do, over the picture and as large as it will go, and nothing
+       else. Which photo it belongs to is on the thumbnail below; up here
+       it was one more thing to read while trying to hold a pose. */
     function setLabel(cue) {
       if (!cue) { u.label.hidden = true; u.label.innerHTML = ''; return; }
       var arrow = arrowSvg(cue.arrow);
@@ -259,8 +269,7 @@ window.HairSelfieTripod = (function () {
          side of the words it is pointing towards */
       var inner = cue.arrow === 'left' ? arrow + cue.act : cue.act + arrow;
       u.label.hidden = false;
-      u.label.innerHTML = '<b data-arrow="' + (cue.arrow || 'none') + '">' + inner +
-        '</b><span>' + cue.of + '</span>';
+      u.label.innerHTML = '<b data-arrow="' + (cue.arrow || 'none') + '">' + inner + '</b>';
     }
 
     function showGuide(def) {
@@ -276,16 +285,41 @@ window.HairSelfieTripod = (function () {
       u.flash.classList.add('is-on');
     }
 
-    function renderStrip() {
-      u.strip.innerHTML = defs.map(function (d) {
+    /*
+     * The finished set, laid out where the camera was. Once the last shot
+     * is taken the live view has nothing left to show — you have walked
+     * back to the phone and what you want to see is what you got.
+     */
+    function showReview() {
+      u.review.className = 'tripod-review' + (defs.length > 1 ? '' : ' one');
+      u.review.innerHTML = defs.map(function (d) {
         var url = thumbs[d.key];
-        return '<button type="button" class="tripod-thumb' + (url ? ' has-shot' : '') +
-          '" data-key="' + d.key + '"' + (url ? '' : ' disabled') + '>' +
-          (url ? '<img src="' + url + '" alt="">' : '') +
-          '<span>' + d.label + '</span>' +
-          (url ? '<em>Retake</em>' : '') +
-          '</button>';
+        return '<button type="button" class="tripod-shot" data-key="' + d.key + '">' +
+          (url ? '<img src="' + url + '" alt="' + d.label + '">' : '') +
+          '<span>' + d.label + '</span><em>Retake</em></button>';
       }).join('');
+      u.review.hidden = false;
+    }
+
+    function hideReview() {
+      u.review.hidden = true;
+      u.review.innerHTML = '';
+    }
+
+    /* Waiting for you to say you are set — where it starts, and where
+       "take them again" comes back to. */
+    function readyState() {
+      u.start.hidden = false;
+      u.start.textContent = "I'm ready";
+      u.start.classList.add('btn-primary');
+      u.use.hidden = true;
+      u.count.textContent = '';
+      setCue('Ready for your ' + (defs.length === 1 ? 'photo' : 'photos') + '?',
+             defs.length === 1
+               ? 'Prop the phone up, then press ready.'
+               : 'Front, then turn, turn, and turn around.');
+      setLabel(null);
+      showGuide(defs[0]);
     }
 
     function now() {
@@ -312,7 +346,7 @@ window.HairSelfieTripod = (function () {
       setLabel(cue);
       setCue(status || cue.act, '');
       showGuide(def);
-      say(cue.act);
+      say(cue.say);
 
       var n = seconds;
       var t0 = now();
@@ -335,12 +369,15 @@ window.HairSelfieTripod = (function () {
           flash();
           /* the frame is taken here; the file is written a moment later */
           var canvas = snap(u.video);
+          /* the exact moment of capture, for anything watching the rhythm */
+          try {
+            u.root.dispatchEvent(new CustomEvent('tripod:shot', { detail: { key: def.key } }));
+          } catch (e) { /* older browsers just do not get the event */ }
           encoding.push(encode(canvas, def.key).then(function (file) {
             if (cancelled) return;
             shots[def.key] = file;
             if (thumbs[def.key]) URL.revokeObjectURL(thumbs[def.key]);
             thumbs[def.key] = URL.createObjectURL(file);
-            renderStrip();
           }));
         });
       }
@@ -362,8 +399,8 @@ window.HairSelfieTripod = (function () {
         showGuide(null);
         setLabel(null);
         var done = defs.every(function (d) { return shots[d.key]; });
-        setCue(done ? 'All done' : 'Stopped',
-               done ? 'Check them below — tap any one to retake it.' : '');
+        showReview();
+        setCue(done ? 'All done' : 'Stopped', 'Tap a photo to retake just that one.');
         say(done ? 'Done' : 'Stopped');
         u.start.hidden = false;
         u.start.textContent = 'Take them again';
@@ -404,14 +441,30 @@ window.HairSelfieTripod = (function () {
 
     u.close.onclick = function () { finish(false); };
     u.use.onclick = function () { finish(true); };
-    u.start.onclick = function () { cancelled = false; begin(defs); };
-    u.strip.onclick = function (e) {
-      var btn = e.target.closest && e.target.closest('.tripod-thumb');
-      if (!btn || btn.disabled) return;
+    u.start.onclick = function () {
+      cancelled = false;
+      /* Taking them again means all of them: the old set goes, the camera
+         comes back, and it waits for you to say you are set — you have to
+         walk back into shot before it counts down. */
+      if (Object.keys(shots).length) {
+        Object.keys(thumbs).forEach(function (k) { URL.revokeObjectURL(thumbs[k]); });
+        shots = {};
+        thumbs = {};
+        encoding = [];
+        hideReview();
+        readyState();
+        return;
+      }
+      begin(defs);
+    };
+    u.review.onclick = function (e) {
+      var btn = e.target.closest && e.target.closest('.tripod-shot');
+      if (!btn) return;
       var def = defs.filter(function (d) { return d.key === btn.dataset.key; })[0];
       if (!def) return;
       cancelled = false;
       audio();
+      hideReview();               // back to the live view for this one
       u.start.hidden = true;
       u.use.hidden = true;
       shoot(def, 'Retaking ' + def.label.toLowerCase()).then(function () {
@@ -430,19 +483,8 @@ window.HairSelfieTripod = (function () {
         u.video.play().catch(function () { /* autoplay attrs cover this */ });
         u.root.hidden = false;
         document.body.classList.add('tripod-open');
-        u.start.hidden = false;
-        u.start.textContent = "I'm ready";
-        u.start.classList.add('btn-primary');
-        u.use.hidden = true;
-        u.count.textContent = '';
         shots = {};
-        setCue('Ready for your ' + (defs.length === 1 ? 'photo' : 'photos') + '?',
-               defs.length === 1
-                 ? 'Prop the phone up, then press ready.'
-                 : 'Face front, turn right, turn left, turn around.');
-        setLabel(null);
-        showGuide(defs[0]);
-        renderStrip();
+        readyState();
 
         if (navigator.wakeLock && navigator.wakeLock.request) {
           navigator.wakeLock.request('screen')

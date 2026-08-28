@@ -861,7 +861,7 @@ body.tripod-open { overflow: hidden; }
      wrong half of it. Sized so the longest of them ("Turn around" plus
      its arrow) still fits the frame on a narrow phone. */
   white-space: nowrap;
-  font-size: clamp(24px, 9.2vw, 46px);
+  font-size: clamp(28px, 11vw, 54px);
   font-weight: 800;
   line-height: 1.05;
   letter-spacing: -0.5px;
@@ -869,20 +869,38 @@ body.tripod-open { overflow: hidden; }
   text-transform: uppercase;
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
 }
+/*
+ * Half again as tall as the word beside it, and moving: three seconds is
+ * not long enough to read, so it has to be caught rather than parsed.
+ */
 .tripod-arrow {
-  width: 0.92em;
-  height: 0.92em;
+  width: 1.5em;
+  height: 1.5em;
   flex: 0 0 auto;
   filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.85));
 }
+.tripod-arrow.is-right { animation: tripod-nudge-right 1s ease-in-out infinite; }
+.tripod-arrow.is-left  { animation: tripod-nudge-left 1s ease-in-out infinite; }
+.tripod-arrow.is-around { animation: tripod-spin 1.6s ease-in-out infinite; }
 
-.tripod-label span {
-  display: block;
-  margin-top: 4px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--accent);
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
+@keyframes tripod-nudge-right {
+  0%, 100% { transform: translateX(-16%); opacity: 0.75; }
+  55%      { transform: translateX(22%);  opacity: 1; }
+}
+@keyframes tripod-nudge-left {
+  0%, 100% { transform: translateX(16%);  opacity: 0.75; }
+  55%      { transform: translateX(-22%); opacity: 1; }
+}
+@keyframes tripod-spin {
+  0%       { transform: rotate(0deg); }
+  70%, 100% { transform: rotate(360deg); }
+}
+
+/* a still arrow is better than none for anyone who asked for less motion */
+@media (prefers-reduced-motion: reduce) {
+  .tripod-arrow.is-right,
+  .tripod-arrow.is-left,
+  .tripod-arrow.is-around { animation: none; }
 }
 
 .tripod-count {
@@ -916,51 +934,52 @@ body.tripod-open { overflow: hidden; }
    reads as a warning */
 .tripod-cue span { display: block; margin-top: 3px; color: var(--muted); }
 
-.tripod-strip {
+/* the finished set, laid out over the stage once the camera is done */
+.tripod-review {
+  position: absolute;
+  inset: 0;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 7px;
-  margin-top: 12px;
-}
-.tripod-strip:has(.tripod-thumb:only-child) { grid-template-columns: 1fr; max-width: 130px; }
-.tripod-thumb {
-  position: relative;
-  aspect-ratio: 4 / 5;
-  padding: 0;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
   background: #0a0b0e;
-  border: 1.5px dashed #3a3f4b;
-  border-radius: 9px;
+}
+.tripod-review.one { grid-template-columns: 1fr; }
+.tripod-shot {
+  position: relative;
+  padding: 0;
   overflow: hidden;
-  color: var(--muted);
+  border: 0;
+  border-radius: 8px;
+  background: #14161c;
+  color: #dfe4ec;
   font: inherit;
-  font-size: 10.5px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   cursor: pointer;
 }
-.tripod-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.tripod-thumb.has-shot { border-style: solid; border-color: var(--line); }
-.tripod-thumb span {
+.tripod-shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tripod-shot span {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  padding: 3px 2px;
+  padding: 4px 3px;
   background: rgba(0, 0, 0, 0.72);
-  color: #dfe4ec;
 }
-.tripod-thumb em {
+.tripod-shot em {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.45);
   color: #fff;
   font-style: normal;
+  font-size: 13px;
   opacity: 0;
 }
-.tripod-thumb:hover em, .tripod-thumb:focus em { opacity: 1; }
-.tripod-thumb[disabled] { cursor: default; }
+.tripod-shot:hover em, .tripod-shot:focus em { opacity: 1; }
 
 .tripod-actions { margin-top: 12px; display: grid; gap: 8px; }
 
