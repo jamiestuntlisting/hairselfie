@@ -841,6 +841,36 @@ body.tripod-open { overflow: hidden; }
   color: rgba(255, 255, 255, 0.65);
   filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.9));
 }
+/* the angle, readable from wherever you are standing */
+.tripod-label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 14px 12px 20px;
+  text-align: center;
+  background: linear-gradient(rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0));
+  pointer-events: none;
+}
+.tripod-label b {
+  display: block;
+  font-size: clamp(30px, 11vw, 52px);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.5px;
+  color: #fff;
+  text-transform: uppercase;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+}
+.tripod-label span {
+  display: block;
+  margin-top: 4px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
+}
+
 .tripod-count {
   position: absolute;
   inset: 0;
@@ -868,7 +898,9 @@ body.tripod-open { overflow: hidden; }
 
 .tripod-cue { margin: 12px 0 0; font-size: 14px; color: var(--muted); }
 .tripod-cue b { display: block; font-size: 19px; color: var(--text); }
-.tripod-cue span { display: block; margin-top: 2px; color: var(--accent); font-weight: 600; }
+/* the accent belongs to the facing hint over the picture; down here it
+   reads as a warning */
+.tripod-cue span { display: block; margin-top: 3px; color: var(--muted); }
 
 .tripod-strip {
   display: grid;

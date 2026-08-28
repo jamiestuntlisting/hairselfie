@@ -21,7 +21,13 @@ window.HairSelfieTripod = (function () {
   'use strict';
 
   var SECONDS = 3;            // between shots
-  var LEAD_IN = 3;            // and before the first one
+
+  /*
+   * There is deliberately no lead-in countdown. Pressing the button is
+   * how you say you are set, and the first angle's own countdown starts
+   * straight away — counting down twice in a row before the first photo
+   * just made people wait through the same three seconds twice.
+   */
 
   /* Said out loud, so short. The screen carries the longer version. */
   var CUE = {
@@ -109,6 +115,7 @@ window.HairSelfieTripod = (function () {
         '<div class="tripod-stage">' +
           '<video class="tripod-video" playsinline autoplay muted></video>' +
           '<div class="tripod-guide" aria-hidden="true"></div>' +
+          '<div class="tripod-label" aria-hidden="true" hidden></div>' +
           '<div class="tripod-count" aria-hidden="true"></div>' +
           '<div class="tripod-flash" aria-hidden="true"></div>' +
         '</div>' +
@@ -118,14 +125,15 @@ window.HairSelfieTripod = (function () {
           '<button type="button" class="btn btn-primary btn-big" data-act="use" hidden>Use these photos</button>' +
           '<button type="button" class="btn btn-primary btn-big" data-act="start">Start</button>' +
         '</div>' +
-        '<p class="tripod-note">Prop your phone up first. Three seconds between shots, ' +
-          'with a spoken cue and a countdown you can hear — you will not need to see the screen.</p>' +
+        '<p class="tripod-note">Each shot is called out loud and counted down, ' +
+          'so you can turn away from the screen.</p>' +
       '</div>';
     document.body.appendChild(root);
     ui = {
       root: root,
       video: root.querySelector('.tripod-video'),
       guide: root.querySelector('.tripod-guide'),
+      label: root.querySelector('.tripod-label'),
       count: root.querySelector('.tripod-count'),
       flash: root.querySelector('.tripod-flash'),
       cue: root.querySelector('.tripod-cue'),
@@ -194,6 +202,15 @@ window.HairSelfieTripod = (function () {
       u.cue.innerHTML = '<b>' + title + '</b>' + (detail ? '<span>' + detail + '</span>' : '');
     }
 
+    /* The angle, over the picture and as large as it will go — this is
+       what you are checking from across the room, not the small print. */
+    function setLabel(def, detail) {
+      if (!def) { u.label.hidden = true; u.label.innerHTML = ''; return; }
+      u.label.hidden = false;
+      u.label.innerHTML = '<b>' + def.label + '</b>' +
+        (detail ? '<span>' + detail + '</span>' : '');
+    }
+
     function showGuide(def) {
       u.guide.innerHTML = def && window.Outlines
         ? Outlines.svgMarkup(def.outline, def.mirror)
@@ -238,7 +255,8 @@ window.HairSelfieTripod = (function () {
     function shoot(def) {
       if (cancelled) return Promise.resolve();
       var cue = cueFor(def);
-      setCue(def.label, cue.show);
+      setLabel(def, cue.show);
+      setCue('Taking ' + def.label.toLowerCase(), '');
       showGuide(def);
       say(cue.say);
 
@@ -284,12 +302,13 @@ window.HairSelfieTripod = (function () {
       }).then(function () {
         if (cancelled) return;
         showGuide(null);
+        setLabel(null);
         var done = defs.every(function (d) { return shots[d.key]; });
         setCue(done ? 'All done' : 'Stopped',
                done ? 'Check them below — tap any one to retake it.' : '');
         say(done ? (defs.length === 1 ? 'Done.' : 'All done.') : 'Stopped.');
         u.start.hidden = false;
-        u.start.textContent = 'Start again';
+        u.start.textContent = 'Take them again';
         u.use.hidden = !Object.keys(shots).length;
         /* once there are photos, keeping them is the thing you came to do */
         u.start.classList.toggle('btn-primary', u.use.hidden);
@@ -300,27 +319,7 @@ window.HairSelfieTripod = (function () {
       audio();
       u.start.hidden = true;
       u.use.hidden = true;
-      setCue('Get set', 'Starting in ' + LEAD_IN + '…');
-      say('Get set.');
-      var n = LEAD_IN;
-      var t0 = now();
-      var elapsed = 0;
-      u.count.textContent = String(n);
-      function lead() {
-        elapsed++;
-        return waitUntil(t0 + elapsed * 1000).then(function () {
-          if (cancelled) return;
-          n--;
-          if (n > 0) {
-            u.count.textContent = String(n);
-            tick();
-            return lead();
-          }
-          u.count.textContent = '';
-          return sequence(list);
-        });
-      }
-      return lead();
+      return sequence(list);
     }
 
     function cleanup() {
@@ -372,14 +371,16 @@ window.HairSelfieTripod = (function () {
         u.root.hidden = false;
         document.body.classList.add('tripod-open');
         u.start.hidden = false;
-        u.start.textContent = 'Start';
+        u.start.textContent = "I'm ready";
         u.start.classList.add('btn-primary');
         u.use.hidden = true;
         u.count.textContent = '';
         shots = {};
-        setCue('Ready', defs.length === 1
-          ? 'Prop the phone up so your head fills the guide.'
-          : 'Prop the phone up so your head fills the guide, then press start.');
+        setCue('Ready for your ' + (defs.length === 1 ? 'photo' : 'photos') + '?',
+               'Prop the phone up so your head fills the guide. ' +
+               (defs.length === 1 ? 'It counts down from three.'
+                                  : 'Front first, then left, right and back.'));
+        setLabel(null);
         showGuide(defs[0]);
         renderStrip();
 
