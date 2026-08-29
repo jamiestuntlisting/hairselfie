@@ -90,7 +90,7 @@ export default {
 function corsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin': origin,
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400'
   };
@@ -164,6 +164,9 @@ async function sheets(request, env, url) {
        everything it passes through, and there is no reason to find out. */
     const key = url.searchParams.get('key');
     return key ? one(env, url, who, key) : listMine(env, url, who);
+  }
+  if (request.method === 'DELETE') {
+    return remove(env, url, who, url.searchParams.get('key'));
   }
   return json({ error: 'Not something this endpoint does.' }, 405);
 }
@@ -240,14 +243,42 @@ async function save(request, env, url, who) {
   return json({ key, size: body.byteLength, savedAt: now.toISOString() }, 201, url.origin);
 }
 
+/*
+ * Deleting one. Same ownership rule as reading: your own prefix, or
+ * anything if you run the place — and never a usage record, which is not
+ * a sheet and is not anybody's to throw away through this door.
+ *
+ * R2 delete does not report whether anything was there, and it does not
+ * need to: gone is gone either way, and a second press of the button
+ * should not produce an error about the first one having worked.
+ */
+async function remove(env, url, who, key) {
+  if (!key || (key.indexOf(who.id + '/') !== 0 && !isAdmin(env, who))) {
+    return json({ error: 'Not yours.' }, 403);
+  }
+  if (key.indexOf(USE_PREFIX) === 0 || key.indexOf(SEEN_PREFIX) === 0) {
+    return json({ error: 'Not a sheet.' }, 403);
+  }
+  await env.SHEETS.delete(key);
+  return json({ deleted: key }, 200, url.origin);
+}
+
 async function listMine(env, url, who) {
-  const listed = await env.SHEETS.list({ prefix: who.id + '/', limit: 100 });
-  const sheetsOut = listed.objects.map((o) => ({
-    key: o.key,
-    size: o.size,
-    kind: (o.customMetadata && o.customMetadata.kind) || '',
-    createdAt: (o.customMetadata && o.customMetadata.createdAt) || o.uploaded
-  })).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  /* include: without it R2 leaves the metadata out and every sheet comes
+     back nameless — the key is read as a backstop for the same reason */
+  const listed = await env.SHEETS.list({
+    prefix: who.id + '/', limit: 100, include: ['customMetadata']
+  });
+  const sheetsOut = listed.objects.map((o) => {
+    const meta = o.customMetadata || {};
+    const fromKey = readKey(o.key);
+    return {
+      key: o.key,
+      size: o.size,
+      kind: meta.kind || fromKey.kind,
+      createdAt: meta.createdAt || o.uploaded
+    };
+  }).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   return json({ sheets: sheetsOut }, 200, url.origin);
 }
 

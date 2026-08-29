@@ -115,12 +115,53 @@
           '<b>' + esc(kindOf(s)) + '</b>' +
           '<span class="saved-when">' + esc(when(s.createdAt)) + '</span>' +
           '<span class="saved-note">' + esc(sizeOf(s.size)) + '</span>' +
-          '<a class="btn btn-small" download="' + esc(name) + '" href="#">Save to phone</a>' +
+          '<span class="saved-actions">' +
+            '<a class="btn btn-small" download="' + esc(name) + '" href="#">Save to phone</a>' +
+            '<button type="button" class="btn btn-small btn-danger" data-act="delete">Delete</button>' +
+          '</span>' +
         '</div>' +
       '</div>';
     }).join('');
     watchForView();
   }
+
+  /*
+   * Deleting one. It asks first, because there is no undo — the sheet is
+   * gone from the account, though whatever was saved to the phone stays
+   * on the phone, which is what the question says.
+   */
+  listEl.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('[data-act="delete"]');
+    if (!btn) return;
+    var card = btn.closest('.saved-card');
+    var key = card && card.dataset.key;
+    if (!key) return;
+    if (!window.confirm('Delete this sheet from your account?\n\n' +
+        'Any copy you already saved to your phone is not affected.')) return;
+
+    btn.disabled = true;
+    btn.textContent = 'Deleting…';
+    Sheets.remove(key).then(function () {
+      /* the object URL for this one lives on its own img, nowhere else */
+      var img = card.querySelector('img');
+      if (img && img.src.indexOf('blob:') === 0) {
+        URL.revokeObjectURL(img.src);
+        urls = urls.filter(function (u) { return u !== img.src; });
+      }
+      card.remove();
+      var left = listEl.querySelectorAll('.saved-card').length;
+      if (!left) {
+        status('Nothing saved yet. Make a sheet and press create — it is kept here ' +
+               'automatically while you are signed in.');
+      } else {
+        status(left + (left === 1 ? ' sheet' : ' sheets') + ', newest first.');
+      }
+    }).catch(function (err) {
+      btn.disabled = false;
+      btn.textContent = 'Delete';
+      status('Could not delete that one — ' + esc(err.message), 'is-warn');
+    });
+  });
 
   function load() {
     if (!Sheets.canSave()) {

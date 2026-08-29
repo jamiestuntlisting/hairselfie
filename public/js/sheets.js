@@ -43,6 +43,20 @@ window.HairSelfieSheets = (function () {
     });
   }
 
+  function remove(key) {
+    var t = token();
+    if (!t) return Promise.reject(new Error('not signed in'));
+    return fetch(PATH + '?key=' + encodeURIComponent(key), {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer ' + t }
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        if (!res.ok) throw new Error(body.error || ('Could not delete (' + res.status + ')'));
+        return true;
+      });
+    });
+  }
+
   /* Everything this account has saved, newest first. */
   function list() {
     var t = token();
@@ -91,5 +105,5 @@ window.HairSelfieSheets = (function () {
       .catch(function () { return false; });   // never worth interrupting anyone over
   }
 
-  return { save: save, list: list, canSave: canSave, recordUse: recordUse };
+  return { save: save, list: list, remove: remove, canSave: canSave, recordUse: recordUse };
 })();
