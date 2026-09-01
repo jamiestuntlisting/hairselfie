@@ -1,5 +1,5 @@
 /*
- * Hair Selfie — UI wiring.
+ * The Selfie Tool — UI wiring.
  *
  * Photos are handled entirely in the browser: picked/captured files are
  * decoded locally, framed on canvas and exported as one JPEG. Nothing is

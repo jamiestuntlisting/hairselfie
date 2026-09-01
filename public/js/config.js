@@ -1,5 +1,5 @@
 /*
- * Hair Selfie configuration.
+ * Selfie Tool configuration.
  *
  * mode: 'demo'         — runs standalone with a local profile and a sample
  *                        performer roster. Good for trying the app before

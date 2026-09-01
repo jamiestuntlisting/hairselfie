@@ -1,7 +1,7 @@
 {
-  "name": "hairselfie",
+  "name": "selfie",
   "private": true,
-  "description": "Hair Selfie — a StuntListing add-on. Four-angle hair reference sheets, composed in the browser.",
+  "description": "The Selfie Tool — a StuntListing add-on. Hair, wardrobe and headshot reference sheets, composed in the browser.",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"

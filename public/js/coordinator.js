@@ -187,7 +187,7 @@
       shareBtn.hidden = false;
       shareBtn.addEventListener('click', function () {
         navigator.share({
-          title: 'Hair Selfie',
+          title: 'The Selfie Tool',
           text: 'Please send four hair photos',
           url: link
         }).catch(function () { /* dismissed */ });

@@ -1,12 +1,12 @@
-# Hair Selfie · a StuntListing add-on
+# The Selfie Tool · a StuntListing add-on
 
-Build a four-angle **hair reference sheet** — front, left side, right side, back — right from a
-phone or computer, with the performer's details printed underneath, and download it as a single
-JPEG.
+Build a **reference sheet** right from a phone or computer, with the performer's details printed
+underneath, and download it as a single JPEG. Three kinds: four angles of the hair, four
+full-length angles for wardrobe, or a single headshot.
 
-**Live:** https://hairselfie.jamie-181.workers.dev
+**Live:** https://selfie.jamie-181.workers.dev
 
-![The Hair Selfie editor](docs/screenshot-editor.png)
+![The Selfie Tool editor](docs/screenshot-editor.png)
 
 ## What it does
 
@@ -103,7 +103,7 @@ The repo is set up as a Cloudflare **Workers static-assets** project (`wrangler.
 npx wrangler deploy        # prompts a browser login the first time
 ```
 
-That publishes to `https://hairselfie.<your-subdomain>.workers.dev`.
+That publishes to `https://selfie.<your-subdomain>.workers.dev`.
 
 **Automatically on every push** — the included GitHub Action
 (`.github/workflows/deploy.yml`) deploys whenever the main development branch is pushed.
@@ -174,7 +174,7 @@ real sign-in is ever wanted. Nothing in the UI asks for one.
 A coordinator picks a performer and gets a link:
 
 ```
-https://…/hair-selfie/index.html?p=<token>&from=<coordinatorId>
+https://…/index.html?p=<token>&from=<coordinatorId>
 ```
 
 Opened on a phone, that link names the performer, fills in their details and drops them straight
