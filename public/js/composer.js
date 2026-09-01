@@ -328,6 +328,19 @@ window.Composer = (function () {
       noteLines = wrapText(scratch, noteText, Math.round(fullW * 0.94), 2);
     }
 
+    /*
+     * When the photos were taken. The file's own timestamp where there is
+     * one — that is the day the picture was made, which is the question a
+     * coordinator is asking — and the day the sheet was built otherwise.
+     */
+    var takenText = '';
+    if (person && person.takenAt && fmt.longDate) {
+      var written = fmt.longDate(person.takenAt);
+      if (written) takenText = 'Photo taken on ' + written;
+    }
+    var takenSize = takenText ? Math.round(TS * 0.032) : 0;
+    var takenGap = Math.round(TS * 0.03);
+
     /* capability chips */
     var chips = [];
     if (person && person.canCut) chips.push('ABLE TO CUT HAIR');
@@ -361,7 +374,11 @@ window.Composer = (function () {
       if (nameSize || detailLines.length || noteLines.length) infoH += chipGapTop;
       infoH += chipH;
     }
-    if (!nameSize && !detailLines.length && !noteLines.length && !chips.length) {
+    if (takenSize) {
+      if (nameSize || detailLines.length || noteLines.length || chips.length) infoH += takenGap;
+      infoH += takenSize;
+    }
+    if (!nameSize && !detailLines.length && !noteLines.length && !chips.length && !takenSize) {
       infoH = Math.round(TS * 0.04);
     }
 
@@ -438,6 +455,15 @@ window.Composer = (function () {
       });
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
+      ty += chipH;
+    }
+
+    if (takenSize) {
+      if (nameSize || detailLines.length || noteLines.length || chips.length) ty += takenGap;
+      ctx.font = '500 ' + takenSize + 'px ' + FONT_STACK;
+      ctx.fillStyle = 'rgba(255,255,255,0.62)';
+      ctx.fillText(takenText, W / 2, ty);
+      ty += takenSize;
     }
 
     return canvas;

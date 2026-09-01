@@ -97,5 +97,31 @@ window.HairSelfieFormat = (function () {
     return Math.floor(inches / 12) + "'" + (inches % 12) + '"';
   }
 
-  return { phone: phone, weight: weight, height: height };
+  var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+                'August', 'September', 'October', 'November', 'December'];
+
+  function ordinal(n) {
+    /* 11th, 12th and 13th are the exceptions the last digit would get wrong */
+    if (n % 100 >= 11 && n % 100 <= 13) return n + 'th';
+    return n + (['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+  }
+
+  /*
+   * "Tuesday, September 1st, 2026" — written out rather than 09/01, which
+   * reads as the first of September to some people and the ninth of
+   * January to others, on a sheet that gets passed around a set.
+   *
+   * Built by hand rather than through toLocaleDateString because the point
+   * is this exact form: some locales would render it back to front, and
+   * none of them offer the ordinal.
+   */
+  function longDate(value) {
+    var d = value instanceof Date ? value : new Date(value);
+    if (!d || isNaN(d.getTime())) return '';
+    return DAYS[d.getDay()] + ', ' + MONTHS[d.getMonth()] + ' ' +
+           ordinal(d.getDate()) + ', ' + d.getFullYear();
+  }
+
+  return { phone: phone, weight: weight, height: height, longDate: longDate };
 })();

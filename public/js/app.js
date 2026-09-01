@@ -483,7 +483,13 @@
     img.onload = function () {
       var old = state.slots[key];
       if (old && old.url) URL.revokeObjectURL(old.url);
-      state.slots[key] = { img: img, url: url, zoom: 1, panX: 0, panY: 0, rot: 0, fileName: file.name };
+      state.slots[key] = {
+        img: img, url: url, zoom: 1, panX: 0, panY: 0, rot: 0,
+        fileName: file.name,
+        /* the file's own timestamp: for a photo just taken this is now, and
+           for one out of the camera roll it is the day it was taken */
+        taken: file.lastModified || 0
+      };
       clearSelection();
       renderCell(key);
       updateCreateStatus();
@@ -792,9 +798,24 @@
     return o;
   }
 
+  /*
+   * The day the photos were taken: the most recent of them, since that is
+   * the one that says how current the hair is. Anything missing or in the
+   * future falls back to today, which is the only date this app can
+   * actually vouch for.
+   */
+  function takenAt() {
+    var now = Date.now();
+    var stamps = SLOT_KEYS.map(function (k) {
+      return (state.slots[k] && state.slots[k].taken) || 0;
+    }).filter(function (t) { return t > 0 && t <= now + 60000; });
+    return stamps.length ? Math.max.apply(null, stamps) : now;
+  }
+
   /* Everything printed on the sheet: profile fields, note and flags. */
   function readSheet() {
     var o = readForm();
+    o.takenAt = takenAt();
     o.note = noteInput.value.trim();
     /* the hair questions do not appear on every page */
     o.canCut = !!(cutBox && cutBox.checked);
