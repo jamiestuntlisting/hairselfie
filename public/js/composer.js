@@ -460,9 +460,14 @@ window.Composer = (function () {
 
     if (takenSize) {
       if (nameSize || detailLines.length || noteLines.length || chips.length) ty += takenGap;
+      /* In the corner rather than under the middle: it is a stamp on the
+         sheet, not part of what the sheet says about the person. It still
+         takes its own line, so nothing above it can land on top of it. */
       ctx.font = '500 ' + takenSize + 'px ' + FONT_STACK;
       ctx.fillStyle = 'rgba(255,255,255,0.62)';
-      ctx.fillText(takenText, W / 2, ty);
+      ctx.textAlign = 'right';
+      ctx.fillText(takenText, W - M, ty);
+      ctx.textAlign = 'center';
       ty += takenSize;
     }
 
