@@ -345,10 +345,33 @@ window.Composer = (function () {
     var chips = [];
     if (person && person.canCut) chips.push('ABLE TO CUT HAIR');
     if (person && person.canShave) chips.push('ABLE TO SHAVE');
-    var chipSize = Math.round(TS * 0.048);
+    /*
+     * Half again the size they were, and in highlighter yellow — the only
+     * colour on the sheet, so they are the first thing anyone looks at
+     * after the name.
+     */
+    var CHIP_INK = '#eaff45';
+    var chipSize = Math.round(TS * 0.072);
     var chipPadX = Math.round(chipSize * 0.85);
     var chipH = Math.round(chipSize * 2.3);
     var chipGap = Math.round(TS * 0.022);
+
+    /*
+     * At this size two chips are close to the width of the sheet, so the
+     * row is measured before it is drawn and stepped down if it would run
+     * off the edge. Bigger is the point; overflowing is not.
+     */
+    if (chips.length) {
+      scratch.font = '700 ' + chipSize + 'px ' + FONT_STACK;
+      var rowW = chips.reduce(function (n, c) {
+        return n + scratch.measureText(c).width + chipPadX * 2;
+      }, 0) + chipGap * (chips.length - 1);
+      if (rowW > fullW) {
+        chipSize = Math.max(24, Math.floor(chipSize * (fullW / rowW)));
+        chipPadX = Math.round(chipSize * 0.85);
+        chipH = Math.round(chipSize * 2.3);
+      }
+    }
 
     /* vertical rhythm */
     var gapTop = Math.round(TS * 0.075);
@@ -446,10 +469,14 @@ window.Composer = (function () {
       ctx.textBaseline = 'middle';
       chips.forEach(function (c, i) {
         roundRectPath(ctx, cx, ty, widths[i], chipH, chipH / 2);
-        ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-        ctx.lineWidth = Math.max(2, TS * 0.0028);
+        /* a wash inside the outline rather than a solid block: enough to
+           read as highlighted, not so much that it shouts over the name */
+        ctx.fillStyle = 'rgba(234,255,69,0.14)';
+        ctx.fill();
+        ctx.strokeStyle = CHIP_INK;
+        ctx.lineWidth = Math.max(2, TS * 0.0035);
         ctx.stroke();
-        ctx.fillStyle = '#fff';
+        ctx.fillStyle = CHIP_INK;
         ctx.fillText(c, cx + chipPadX, ty + chipH / 2 + chipSize * 0.05);
         cx += widths[i] + chipGap;
       });
